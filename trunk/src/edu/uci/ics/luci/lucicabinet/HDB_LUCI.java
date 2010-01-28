@@ -36,9 +36,9 @@ public class HDB_LUCI{
 	}
 	
 	public synchronized boolean iterate(IteratorWorker iw){
-		byte[] key;
 		boolean x = hdb.iterinit();
 		if(x){
+			byte[] key;
 			while ((key = hdb.iternext()) != null) {
 				iw.doWork(this,key);
 			}
