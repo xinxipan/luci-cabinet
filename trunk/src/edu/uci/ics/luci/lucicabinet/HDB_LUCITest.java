@@ -1,6 +1,8 @@
 package edu.uci.ics.luci.lucicabinet;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import org.junit.After;
 import org.junit.AfterClass;
@@ -8,7 +10,6 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import tokyocabinet.HDB;
 import tokyocabinet.Util;
 
 public class HDB_LUCITest {
@@ -21,29 +22,51 @@ public class HDB_LUCITest {
 	public static void tearDownAfterClass() throws Exception {
 	}
 
+	HDB_LUCI hdb = new HDB_LUCI();
+	
 	@Before
 	public void setUp() throws Exception {
+		assertTrue(hdb != null);
+		try{
+			hdb.open("eraseme.tch");
+		}
+		catch(RuntimeException e){
+			fail("This shouldn't throw an exception"+e);
+		}
 	}
 
 	@After
 	public void tearDown() throws Exception {
+		try{
+			hdb.close();
+		}
+		catch(RuntimeException e){
+			fail("This shouldn't throw an exception"+e);
+		}
 	}
 
 	@Test
 	public void testOpenClose() {
 		HDB_LUCI hdb = new HDB_LUCI();
 		assertTrue(hdb != null);
-		assertTrue(hdb.open("eraseme.tch"));
-		assertTrue(hdb.close());
+		try{
+			hdb.open("eraseme2.tch");
+		}
+		catch(RuntimeException e){
+			fail("This shouldn't throw an exception"+e);
+		}
+		
+		try{
+			hdb.close();
+		}
+		catch(RuntimeException e){
+			fail("This shouldn't throw an exception"+e);
+		}
+		
 	}
 
 	@Test
 	public void testPutGetOut() {
-		HDB_LUCI hdb = new HDB_LUCI();
-		assertTrue(hdb != null);
-		assertTrue(hdb.open("eraseme.tch"));
-		
-		
 		for(int i=0; i< 1000; i++){
 			byte[] key = Util.packint(i);
 			String value = "foo"+i;
@@ -67,43 +90,90 @@ public class HDB_LUCITest {
 			byte[] key = Util.packint(i);
 			byte[] x = hdb.get(key);
 			assertTrue(x == null);
-			assertEquals(HDB.ENOREC,hdb.ecode());
 		}
-		assertTrue(hdb.close());
 	}
 
-	private class CountEntry implements IteratorWorker{
+	private class CountEntry extends IteratorWorker{
 		
 		int count = 0 ;
-
-		public void doWork(HDB_LUCI db, byte[] key) {
+		
+		@Override
+		protected void initialize(HDB_LUCI parent){
+			count = 100;
+		}
+		
+		@Override
+		protected void iterate(byte[] key,byte[] value) {
 			count++;
-			byte[] x = db.get(key);
-			assertEquals(0,db.ecode());
-			String s = (String) Util.deserialize(x);
+			String s = (String) Util.deserialize(value);
 			assertEquals("foo"+(Integer)Util.unpackint(key),s);
+		}
+		
+		@Override
+		protected void shutdown(HDB_LUCI parent){
+			count += 1000;
 		}
 		
 	}
 
 	@Test
 	public void testIterate() {
-		HDB_LUCI hdb = new HDB_LUCI();
-		assertTrue(hdb != null);
-		assertTrue(hdb.open("eraseme.tch"));
-		
 		
 		for(int i=0; i< 1000; i++){
 			byte[] key = Util.packint(i);
 			String value = "foo"+i;
 			hdb.put(key, Util.serialize(value));
-			assertEquals(0,hdb.ecode());
 		}
 		
 		CountEntry iw = new CountEntry();
-		assertTrue(hdb.iterate(iw));
-		assertEquals(1000,iw.count);
+		try{
+			hdb.iterate(iw);
+		}
+		catch(RuntimeException e){
+			fail("This shouldn't throw an exception"+e);
+		}
+		assertEquals(2100,iw.count);
 		
-		assertTrue(hdb.close());
+	}
+	
+	@Test
+	public void testForDeadlock() {
+		/*This finishes if there is no deadlock, this doesn't guarantee no deadlocks can happen though */
+		Runnable r = new Runnable(){
+			public void run() {
+				for(int j=0; j< 10; j++){
+					for(int i=0; i< 1000; i++){
+						byte[] key = Util.packint(i);
+						String value = "foo"+i;
+						hdb.put(key, Util.serialize(value));
+						hdb.get(key);
+					}
+					CountEntry ce = new CountEntry();
+					hdb.iterate(ce);
+				}
+				
+			}
+		};
+		
+		Thread[] t = new Thread[100];
+		for(int i =0; i< 100; i++){
+			t[i] = new Thread(r);
+		}
+		
+		long start = System.currentTimeMillis();
+		for(int i =0; i< 100; i++){
+			t[i].start();
+		}
+		for(int i =0; i< 100; i++){
+			try {
+				t[i].join();
+			} catch (InterruptedException e) {
+				fail("This shouldn't be interrupted"+e);
+			}
+		}
+		double duration = System.currentTimeMillis()-start;
+		System.out.println(""+(100*10*1000)+" puts and "+(100*10*2000)+" gets in "+duration+" milliseconds");
+		System.out.println(""+(duration/((100*10*1000)+(100*10*2000)))+" milliseconds per operation");
+		testIterate();
 	}
 }
