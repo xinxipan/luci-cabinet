@@ -41,6 +41,8 @@ public class HDB_LUCITest {
 
 	@After
 	public void tearDown() throws Exception {
+		hdb.iterate(new RemoveAll());
+
 		try{
 			hdb.close();
 		}
@@ -121,6 +123,7 @@ public class HDB_LUCITest {
 		
 			hdb.put(key, Util.serialize(value));
 		}
+		Util.serialize("foo");
 		
 		assertEquals(hdb.size(),1000);
 		
