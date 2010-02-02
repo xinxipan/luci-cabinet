@@ -10,6 +10,11 @@ import java.net.SocketException;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 
+/**
+ * Butler is a class that provides socket access to a HDB_LUCI database.
+ * See the code for UseCase 3 and 4
+ *
+ */
 public class Butler implements Runnable{
 	
 	enum ServerCommands {PUT,GET,REMOVE,ITERATE, CLOSE, SIZE};
@@ -28,6 +33,9 @@ public class Butler implements Runnable{
 		return log;
 	}
 	
+	/**
+	 * Stop this butler service.
+	 */
 	public void shutdown(){
 		shuttingDown = true;
 		if(serverSocket != null){
@@ -42,6 +50,12 @@ public class Butler implements Runnable{
 		}
 	}
 	
+	/**
+	 * 
+	 * @param db The database to expose
+	 * @param port The port to accept commands on
+	 * @param checker An object which tells us which connections are allowed
+	 */
 	public Butler(DB_LUCI db,int port,AccessControl checker){
 		this.db = db;
 		this.checker = checker;
@@ -52,6 +66,9 @@ public class Butler implements Runnable{
 		}
 	}
 	
+	/**
+	 * This method is called to begin accepting socket connections. 
+	 */
 	public void initialize(){
 		if(serverSocket == null){
 			throw new RuntimeException("Unable to start Butler object");
