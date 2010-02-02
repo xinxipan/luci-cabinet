@@ -48,13 +48,14 @@ public class HDB_LUCITest {
 	@Test
 	public void testOpenClose() {
 		HDB_LUCI hdb = new HDB_LUCI();
-		assertTrue(hdb != null);
 		try{
 			hdb.open("eraseme2.tch");
 		}
 		catch(RuntimeException e){
 			fail("This shouldn't throw an exception"+e);
 		}
+		
+		assertEquals(hdb.size(),0);
 		
 		try{
 			hdb.close();
@@ -74,6 +75,8 @@ public class HDB_LUCITest {
 			hdb.put(key, Util.serialize(value));
 		}
 		
+		assertEquals(hdb.size(),1000);
+		
 		for(int i=0; i< 1000; i++){
 			byte[] key = Util.packint(i);
 			byte[] x = hdb.get(key);
@@ -81,10 +84,14 @@ public class HDB_LUCITest {
 			assertEquals("foo"+i,s);
 		}
 		
+		assertEquals(hdb.size(),1000);
+		
 		for(int i=0; i< 1000; i++){
 			byte[] key = Util.packint(i);
 			hdb.remove(key);
 		}
+		
+		assertEquals(hdb.size(),0);
 		
 		for(int i=0; i< 1000; i++){
 			byte[] key = Util.packint(i);
@@ -93,7 +100,7 @@ public class HDB_LUCITest {
 		}
 	}
 
-	private class CountEntry extends IteratorWorker{
+	private static class CountEntry extends IteratorWorker{
 		
 		private static final long serialVersionUID = -3321514898865348148L;
 		
