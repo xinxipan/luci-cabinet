@@ -1,5 +1,7 @@
 package edu.uci.ics.luci.lucicabinet;
 
+import java.io.Serializable;
+
 
 /** This is a class that is used by luci-cabinet to iterate over synchronized sets.
  * It is used by passing it to a database.  The database iterates overs it's members and
@@ -21,8 +23,10 @@ package edu.uci.ics.luci.lucicabinet;
  * @author djp3
  *
  */
-public class IteratorWorker {
+public class IteratorWorker implements Serializable{
 	
+	private static final long serialVersionUID = 8561619937201394728L;
+
 	protected void initialize(HDB_LUCI parent){
 	}
 	

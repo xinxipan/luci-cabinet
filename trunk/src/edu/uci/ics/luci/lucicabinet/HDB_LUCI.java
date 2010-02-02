@@ -12,7 +12,7 @@ import tokyocabinet.HDB;
 	 *  HDB_LUCI hdb_luci = new HDB_LUCI();
 	 *  </pre>
 */
-public class HDB_LUCI{
+public class HDB_LUCI extends DB_LUCI{
 	
 	private HDB hdb = null;
 	ReentrantReadWriteLock rwlock = null;
@@ -20,7 +20,7 @@ public class HDB_LUCI{
 	public HDB_LUCI() {
 		super();
 		hdb = new HDB();
-		rwlock = new ReentrantReadWriteLock();
+		rwlock = new ReentrantReadWriteLock(true);
 	}
 	
 	/** Open the database stored at the filePathName indicated.
@@ -109,10 +109,10 @@ public class HDB_LUCI{
 			iw.initialize(this);
 		}
 		finally{
+			rwlock.readLock().lock();
 			rwlock.writeLock().unlock();
 		}
 		
-		rwlock.readLock().lock();
 		try{
 			boolean x = hdb.iterinit();
 			if(x){
@@ -146,6 +146,17 @@ public class HDB_LUCI{
 			else{
 				throw new RuntimeException("Error closing a tokyo cabinet database, code:"+hdb.ecode());
 			}
+		}
+		finally{
+			rwlock.writeLock().unlock();
+		}
+	}
+	
+	public Long size(){
+		/* Write lock to make sure that everything finishes */
+		rwlock.writeLock().lock();
+		try{
+			return(hdb.rnum());
 		}
 		finally{
 			rwlock.writeLock().unlock();
