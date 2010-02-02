@@ -95,6 +95,8 @@ public class HDB_LUCITest {
 
 	private class CountEntry extends IteratorWorker{
 		
+		private static final long serialVersionUID = -3321514898865348148L;
+		
 		int count = 0 ;
 		
 		@Override
