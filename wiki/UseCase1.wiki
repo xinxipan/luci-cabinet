@@ -5,10 +5,10 @@
 "I want to use Tokyo Cabinet, and my code is in Java" 
 
 
-= Details =
+== Details ==
 
 {{{
-	package usecase1;
+	package usecase;
 
         import tokyocabinet.Util;
         import edu.uci.ics.luci.lucicabinet.HDB_LUCI;
@@ -32,4 +32,8 @@
         }
 }}}
 
-
+== Output ==
+{{{
+Size:1
+Value:bar
+}}}
