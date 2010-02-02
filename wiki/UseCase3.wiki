@@ -1,4 +1,4 @@
-#summary How to implement Use Case 1:"I want to access a Tokyo Cabinet database across the network using Java"
+#summary How to implement Use Case 3:"I want to access a Tokyo Cabinet database across the network using Java"
 
 = Use Case 3 =
 
