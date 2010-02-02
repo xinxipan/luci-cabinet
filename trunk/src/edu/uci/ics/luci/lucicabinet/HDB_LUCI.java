@@ -6,16 +6,12 @@ import tokyocabinet.HDB;
 
 /**
 	 * This is a class which creates a synchronized (thread-safe) key-value store backed by 
-	 * a tokyo cabinet Hash Database (HDB).
-	 *
-	 * <pre>
-	 *  HDB_LUCI hdb_luci = new HDB_LUCI();
-	 *  </pre>
+	 * a tokyo cabinet Hash Database (HDB). 
 */
 public class HDB_LUCI extends DB_LUCI{
 	
 	private HDB hdb = null;
-	ReentrantReadWriteLock rwlock = null;
+	private ReentrantReadWriteLock rwlock = null;
 
 	public HDB_LUCI() {
 		super();
@@ -28,7 +24,7 @@ public class HDB_LUCI extends DB_LUCI{
 	 * The file will be write locked while open by the file system. If the file is not closed the 
 	 * underlying database will be damaged.
 	 * 
-	 * @param filePathAndName The name of the file to open.
+	 * @param filePathAndName The name of the file to open, e.g."eraseme.tch"
 	 */
 	public void open(String filePathAndName){
 		rwlock.writeLock().lock();
@@ -46,7 +42,7 @@ public class HDB_LUCI extends DB_LUCI{
 	}
 	
 	/**
-	 * Remove an entry from the database. If the key doesn't exist HDB.ENOREC will be returned.
+	 * Remove an entry from the database.  If the record doesn't exist nothing happens.
 	 * @param key The entry to remove.
 	 */
 	public void remove(byte[] key){
@@ -56,7 +52,9 @@ public class HDB_LUCI extends DB_LUCI{
 				return;
 			}
 			else{
-				throw new RuntimeException("Error removing element from tokyo cabinet database, code:"+hdb.ecode());
+				if(hdb.ecode() != HDB.ENOREC){
+					throw new RuntimeException("Error removing element from tokyo cabinet database, code:"+hdb.ecode());
+				}
 			}
 		}
 		finally{
@@ -152,14 +150,16 @@ public class HDB_LUCI extends DB_LUCI{
 		}
 	}
 	
+	/**
+	 * Return the number of records in the database.
+	 */
 	public Long size(){
-		/* Write lock to make sure that everything finishes */
-		rwlock.writeLock().lock();
+		rwlock.readLock().lock();
 		try{
 			return(hdb.rnum());
 		}
 		finally{
-			rwlock.writeLock().unlock();
+			rwlock.readLock().unlock();
 		}
 	}
 	

@@ -4,6 +4,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.util.ArrayList;
+
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -33,6 +35,8 @@ public class HDB_LUCITest {
 		catch(RuntimeException e){
 			fail("This shouldn't throw an exception"+e);
 		}
+		
+		hdb.iterate(new RemoveAll());
 	}
 
 	@After
@@ -43,6 +47,29 @@ public class HDB_LUCITest {
 		catch(RuntimeException e){
 			fail("This shouldn't throw an exception"+e);
 		}
+	}
+	
+	private static class RemoveAll extends IteratorWorker{
+		
+		/**
+		 * 
+		 */
+		private static final long serialVersionUID = 8559552119218888148L;
+		
+		ArrayList<byte[]> removeUs = new ArrayList<byte[]>();
+		
+		@Override
+		protected void iterate(byte[] key,byte[] value) {
+			removeUs.add(key);
+		}
+		
+		@Override
+		protected void shutdown(HDB_LUCI parent){
+			for(byte[] key:removeUs){
+				parent.remove(key);
+			}
+		}
+		
 	}
 
 	@Test
@@ -55,7 +82,27 @@ public class HDB_LUCITest {
 			fail("This shouldn't throw an exception"+e);
 		}
 		
-		assertEquals(hdb.size(),0);
+		hdb.iterate(new RemoveAll());
+		
+		assertEquals(0,hdb.size());
+		
+		try{
+			hdb.remove("foo".getBytes());
+		}
+		catch(RuntimeException e){
+			fail("This shouldn't throw an exception"+e);
+		}
+		
+		try{
+			hdb.put("foo".getBytes(),"bar".getBytes());
+			hdb.put("foo".getBytes(),"baz".getBytes());
+		}
+		catch(RuntimeException e){
+			fail("This shouldn't throw an exception"+e);
+		}
+		
+		assertEquals(1,hdb.size());
+		
 		
 		try{
 			hdb.close();
