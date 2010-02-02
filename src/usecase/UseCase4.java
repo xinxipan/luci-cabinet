@@ -9,6 +9,9 @@ import edu.uci.ics.luci.lucicabinet.Butler;
 import edu.uci.ics.luci.lucicabinet.HDB_LUCI;
 import edu.uci.ics.luci.lucicabinet.HDB_LUCI_Remote;
 
+/**
+ *  This class implements Use Case 4
+ */
 public class UseCase4 {
 	
 	private static class TestAccessControl extends AccessControl{

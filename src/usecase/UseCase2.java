@@ -3,6 +3,9 @@ package usecase;
 import tokyocabinet.Util;
 import edu.uci.ics.luci.lucicabinet.HDB_LUCI;
 
+/**
+ *  This class implements Use Case 2
+ */
 public class UseCase2 {
 
 	public static void main(String[] args) {
