@@ -425,17 +425,17 @@ public class DB_LUCI_Remote extends DB_LUCI{
 	 *  internal state of iw is never changed because it is sent remotely to do it's work.
 	 * @param iw a class representing the work to be done.
 	 */
-	private void iterateAsync(IteratorWorker iw){
+	public void iterateAsync(IteratorWorker iw){
 		threadExecutor.execute(new IterateAsync(iw));
 	}
 	
-	/** Asynchronously iterate over the entries in the database and call the appropriate methods in <param>iw</param>
-	 * to do work.  See IteratorWorker for details on how the iteration works.  If there is information to be returned or
-	 * collected, consider using <pre>iterateSync</pre>.
+	/** Synchronously iterate over the entries in the database and call the appropriate methods in <param>iw</param>
+	 * to do work.  See IteratorWorker for details on how the iteration works.  If there no information needs to be returned or
+	 * collected, consider using <pre>iterateAsync</pre>.
 	 * @param iw
 	 */
-	public void iterate(IteratorWorker iw){
-		iterateAsync(iw);
+	public IteratorWorker iterate(IteratorWorker iw){
+		return(iterateSync(iw));
 	}
 	
 	/**

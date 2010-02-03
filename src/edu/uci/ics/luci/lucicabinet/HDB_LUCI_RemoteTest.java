@@ -163,7 +163,7 @@ public class HDB_LUCI_RemoteTest {
 			
 		CountEntry iw = new CountEntry();
 		try{
-			iw = (CountEntry) hdb_remote.iterateSync(iw);
+			iw = (CountEntry) hdb_remote.iterate(iw);
 		}
 		catch(RuntimeException e){
 			fail("This shouldn't throw an exception"+e);
@@ -191,7 +191,7 @@ public class HDB_LUCI_RemoteTest {
 						hdb_remote.get(key);
 					}
 					CountEntry ce = new CountEntry();
-					hdb_remote.iterate(ce);
+					hdb_remote.iterateAsync(ce);
 				}
 					
 			}

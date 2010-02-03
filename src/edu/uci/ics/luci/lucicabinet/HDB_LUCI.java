@@ -109,7 +109,7 @@ public class HDB_LUCI extends DB_LUCI{
 	 * to do work.  See IteratorWorker for details on how the iteration works.
 	 * @param iw
 	 */
-	public void iterate(IteratorWorker iw){
+	public IteratorWorker iterate(IteratorWorker iw){
 		rwlock.writeLock().lock();
 		try{
 			iw.initialize(this);
@@ -141,6 +141,7 @@ public class HDB_LUCI extends DB_LUCI{
 		finally{
 			rwlock.writeLock().unlock();
 		}
+		return(iw);
 	}
 	
 	/** Close the database. This must be done to ensure database is not damaged on disk after being opened.

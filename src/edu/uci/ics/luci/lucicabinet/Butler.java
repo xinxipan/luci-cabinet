@@ -7,6 +7,7 @@ import java.io.Serializable;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
+import java.util.Set;
 
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
@@ -346,6 +347,24 @@ public class Butler implements Runnable{
 			} catch (IOException e) {
 				getLog().log(Level.ERROR, "Unable to accept a clientSocket",e);
 			}
+		}
+	}
+	
+	public static class SimpleAccessControl extends AccessControl{
+		private Set<String> whitelist;
+
+		public SimpleAccessControl(Set<String> whitelist){
+			this.whitelist = whitelist;
+		}
+
+		@Override
+		public boolean allowSource(String source) {
+			for(String white:whitelist){
+				if(white.equals(source)){
+					return true;
+				}
+			}
+			return false;
 		}
 	}
 

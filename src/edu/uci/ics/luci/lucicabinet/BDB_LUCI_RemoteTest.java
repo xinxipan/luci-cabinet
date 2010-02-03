@@ -163,7 +163,7 @@ public class BDB_LUCI_RemoteTest {
 			
 		CountEntry iw = new CountEntry();
 		try{
-			iw = (CountEntry) bdbl_remote.iterateSync(iw);
+			iw = (CountEntry) bdbl_remote.iterate(iw);
 		}
 		catch(RuntimeException e){
 			fail("This shouldn't throw an exception"+e);
@@ -191,7 +191,7 @@ public class BDB_LUCI_RemoteTest {
 						bdbl_remote.get(key);
 					}
 					CountEntry ce = new CountEntry();
-					bdbl_remote.iterate(ce);
+					bdbl_remote.iterateAsync(ce);
 				}
 					
 			}

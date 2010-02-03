@@ -16,7 +16,7 @@ public abstract class DB_LUCI {
 
 	public abstract Serializable get(Serializable key);
 	
-	public abstract void iterate(IteratorWorker iw);
+	public abstract IteratorWorker iterate(IteratorWorker iw);
 	
 	public abstract Long size();
 	

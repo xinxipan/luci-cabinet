@@ -27,18 +27,17 @@ import java.io.Serializable;
  * the underlying database after the completion of iterate and the call to shutdown.
  *
  */
-public class IteratorWorker implements Serializable{
+public abstract class IteratorWorker implements Serializable{
 	
 	/**
 	 * 
 	 */
-	private static final long serialVersionUID = -9210568925467264284L;
+	private static final long serialVersionUID = -5589001309114852057L;
 
 	protected void initialize(DB_LUCI parent){
 	}
 	
-	protected void iterate(Serializable key,Serializable value){
-	}
+	protected abstract void iterate(Serializable key,Serializable value);
 	
 	protected void shutdown(DB_LUCI parent){
 	}
