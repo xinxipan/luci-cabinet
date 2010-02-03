@@ -3,9 +3,9 @@ package usecase;
 import java.io.IOException;
 import java.net.UnknownHostException;
 
-import tokyocabinet.Util;
 import edu.uci.ics.luci.lucicabinet.AccessControl;
 import edu.uci.ics.luci.lucicabinet.Butler;
+import edu.uci.ics.luci.lucicabinet.DB_LUCI;
 import edu.uci.ics.luci.lucicabinet.HDB_LUCI;
 import edu.uci.ics.luci.lucicabinet.HDB_LUCI_Remote;
 
@@ -33,13 +33,13 @@ public class UseCase3 {
 	public static void main(String[] args) {
 		
 		/* Set up the server side database */
-		final HDB_LUCI hdbl = new HDB_LUCI();
+		final DB_LUCI dbl = new HDB_LUCI();
 		
 		/* Open the server side database */
-		hdbl.open("eraseme.tch");
+		dbl.open("usecase3.tch");
 		
 		/* Create a service to receive commands on port 8181 */
-		Butler butler = new Butler(hdbl,8181,new TestAccessControl());
+		Butler butler = new Butler(dbl,8181,new TestAccessControl());
 		butler.initialize();
 		
 		/* Create the client side database interface which will talk over sockets to the 
@@ -55,12 +55,12 @@ public class UseCase3 {
 			return;
 		}
 
-		byte[] key = Util.serialize("foo");
-		byte[] value = 	Util.serialize("bar");
+		String key = "foo";
+		String value = 	"bar";
 
-		hdbl_remote.put(key,value);
+		hdbl_remote.putSync(key,value);
 		System.out.println("Size:"+hdbl_remote.size());
-		System.out.println("Value:"+(String)Util.deserialize(hdbl_remote.get(key)));
+		System.out.println("Value:"+(String)hdbl_remote.get(key));
 
 		/*Clean up client side */
 		hdbl_remote.close();
@@ -69,6 +69,6 @@ public class UseCase3 {
 		butler.shutdown();
 		
 		/*Clean up server side */
-		hdbl.close();
+		dbl.close();
 	}
 }

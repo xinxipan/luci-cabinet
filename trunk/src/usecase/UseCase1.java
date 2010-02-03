@@ -1,6 +1,5 @@
 package usecase;
 
-import tokyocabinet.Util;
 import edu.uci.ics.luci.lucicabinet.HDB_LUCI;
 
 /**
@@ -11,14 +10,14 @@ public class UseCase1 {
 	public static void main(String[] args) {
 		
 		HDB_LUCI hdbl = new HDB_LUCI();
-		hdbl.open("eraseme.tch");
+		hdbl.open("usecase1.tch");
 		
-		byte[] key = Util.serialize("foo");
-		byte[] value = 	Util.serialize("bar");
+		String key = "foo";
+		String value = 	"bar";
 
 		hdbl.put(key,value);
 		System.out.println("Size:"+hdbl.size());
-		System.out.println("Value:"+(String)Util.deserialize(hdbl.get(key)));
+		System.out.println("Value:"+(String)hdbl.get(key));
 
 		hdbl.close();
 	}

@@ -1,8 +1,10 @@
 package edu.uci.ics.luci.lucicabinet;
 
+import java.io.Serializable;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import tokyocabinet.HDB;
+import tokyocabinet.Util;
 
 /**
 	 * This is a class which creates a synchronized (thread-safe) key-value store backed by 
@@ -45,10 +47,10 @@ public class HDB_LUCI extends DB_LUCI{
 	 * Remove an entry from the database.  If the record doesn't exist nothing happens.
 	 * @param key The entry to remove.
 	 */
-	public void remove(byte[] key){
+	public void remove(Serializable key){
 		rwlock.writeLock().lock();
 		try{
-			if(hdb.out(key)){
+			if(hdb.out(Util.serialize(key))){
 				return;
 			}
 			else{
@@ -67,10 +69,10 @@ public class HDB_LUCI extends DB_LUCI{
 	 * @param key
 	 * @param value
 	 */
-	public void put(byte[] key, byte[] value){
+	public void put(Serializable key, Serializable value){
 		rwlock.writeLock().lock();
 		try{
-			if (hdb.put(key,value)){
+			if (hdb.put(Util.serialize(key),Util.serialize(value))){
 				return;
 			}
 			else{
@@ -87,10 +89,16 @@ public class HDB_LUCI extends DB_LUCI{
 	 * @param key
 	 * @return the value. null if there is no entry
 	 */
-	public byte[] get(byte[] key){
+	public Serializable get(Serializable key){
 		rwlock.readLock().lock();
 		try{
-			return(hdb.get(key));
+			byte[] value = hdb.get(Util.serialize(key));
+			if(value != null){
+				return (Serializable) (Util.deserialize(value));
+			}
+			else{
+				return null;
+			}
 		}
 		finally{
 			rwlock.readLock().unlock();
@@ -114,9 +122,11 @@ public class HDB_LUCI extends DB_LUCI{
 		try{
 			boolean x = hdb.iterinit();
 			if(x){
-				byte[] key;
-				while ((key = hdb.iternext()) != null) {
-					iw.iterate(key,hdb.get(key));
+				byte[] _key;
+				while ((_key = hdb.iternext()) != null) {
+					Serializable key = (Serializable) Util.deserialize(_key);
+					Serializable value = (Serializable) Util.deserialize(hdb.get(_key));
+					iw.iterate(key,value);
 				}
 			}
 		}

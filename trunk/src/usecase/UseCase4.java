@@ -3,7 +3,6 @@ package usecase;
 import java.io.IOException;
 import java.net.UnknownHostException;
 
-import tokyocabinet.Util;
 import edu.uci.ics.luci.lucicabinet.AccessControl;
 import edu.uci.ics.luci.lucicabinet.Butler;
 import edu.uci.ics.luci.lucicabinet.HDB_LUCI;
@@ -36,7 +35,7 @@ public class UseCase4 {
 		final HDB_LUCI hdbl = new HDB_LUCI();
 		
 		/* Open the server side database */
-		hdbl.open("eraseme.tch");
+		hdbl.open("usecase4.tch");
 		
 		/* Create a service to receive commands on port 8181 */
 		Butler butler = new Butler(hdbl,8181,new TestAccessControl());
@@ -47,16 +46,15 @@ public class UseCase4 {
 		
 		final HDB_LUCI_Remote hdbl_remote = new HDB_LUCI_Remote("localhost",8181);
 		
-		final int number = 250;
+		final int number = 100;
 		
 		/*This finishes if there is no deadlock, this doesn't guarantee no deadlocks can happen though */
 		Runnable remote = new Runnable(){
 			public void run() {
 				for(int j=0; j< 10; j++){
-					for(int i=0; i< number; i++){
-						byte[] key = Util.packint(i);
-						String value = "foo"+i;
-						hdbl_remote.put(key, Util.serialize(value));
+					for(Integer key=0; key< number; key++){
+						String value = "foo"+key;
+						hdbl_remote.put(key, value);
 						hdbl_remote.get(key);
 					}
 				}
@@ -67,11 +65,10 @@ public class UseCase4 {
 		Runnable local = new Runnable(){
 			public void run() {
 				for(int j=0; j< 10; j++){
-					for(int i=0; i< number; i++){
-						byte[] key = Util.packint(i);
-						String value = "foo"+i;
-						hdbl.put(key, Util.serialize(value));
-						hdbl.get(key);
+					for(Integer key=0; key< number; key++){
+						String value = "foo"+key;
+						hdbl_remote.put(key, value);
+						hdbl_remote.get(key);
 					}
 				}
 					
