@@ -20,7 +20,7 @@ public class UseCase1 {
 	public static void main(String[] args) {
 		
 		HDB_LUCI hdbl = new HDB_LUCI();
-		hdbl.open("eraseme.tch");
+		hdbl.open("usecase1.tch");
 		
 		String key = "foo";
 		String value = "bar";
