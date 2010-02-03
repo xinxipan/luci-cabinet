@@ -1,7 +1,7 @@
 package usecase;
 
-import tokyocabinet.Util;
-import edu.uci.ics.luci.lucicabinet.HDB_LUCI;
+import edu.uci.ics.luci.lucicabinet.BDB_LUCI;
+import edu.uci.ics.luci.lucicabinet.DB_LUCI;
 
 /**
  *  This class implements Use Case 2
@@ -10,17 +10,16 @@ public class UseCase2 {
 
 	public static void main(String[] args) {
 		
-		final HDB_LUCI hdbl = new HDB_LUCI();
-		hdbl.open("eraseme.tch");
+		final DB_LUCI bdbl = new BDB_LUCI();
+		bdbl.open("usecase2.tcb");
 		
 		Runnable r = new Runnable(){
 			public void run() {
 				for(int j=0; j< 10; j++){
-					for(int i=0; i< 1000; i++){
-						byte[] key = Util.packint(i);
-						String value = "foo"+i;
-						hdbl.put(key, Util.serialize(value));
-						hdbl.get(key);
+					for(Integer key =0; key < 1000; key++){
+						String value = "foo"+key;
+						bdbl.put(key, value);
+						bdbl.get(key);
 					}
 				}
 				
@@ -47,6 +46,6 @@ public class UseCase2 {
 		System.out.println(""+(100*10*1000)+" puts and "+(100*10*1000)+" gets in "+duration+" milliseconds");
 		System.out.println(""+(duration/((100*10*1000)+(100*10*1000)))+" milliseconds per operation");
 		
-		hdbl.close();
+		bdbl.close();
 	}
 }

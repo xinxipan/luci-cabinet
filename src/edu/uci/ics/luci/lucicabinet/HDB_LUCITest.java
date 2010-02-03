@@ -4,6 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 
 import org.junit.After;
@@ -11,8 +12,6 @@ import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import tokyocabinet.Util;
 
 public class HDB_LUCITest {
 
@@ -56,18 +55,18 @@ public class HDB_LUCITest {
 		/**
 		 * 
 		 */
-		private static final long serialVersionUID = 8559552119218888148L;
+		private static final long serialVersionUID = 3482274413997552663L;
 		
-		ArrayList<byte[]> removeUs = new ArrayList<byte[]>();
+		ArrayList<Serializable> removeUs = new ArrayList<Serializable>();
 		
 		@Override
-		protected void iterate(byte[] key,byte[] value) {
+		protected void iterate(Serializable key,Serializable value) {
 			removeUs.add(key);
 		}
 		
 		@Override
-		protected void shutdown(HDB_LUCI parent){
-			for(byte[] key:removeUs){
+		protected void shutdown(DB_LUCI parent){
+			for(Serializable key:removeUs){
 				parent.remove(key);
 			}
 		}
@@ -105,6 +104,9 @@ public class HDB_LUCITest {
 		
 		assertEquals(1,hdb.size());
 		
+		hdb.iterate(new RemoveAll());
+		
+		assertEquals(0,hdb.size());
 		
 		try{
 			hdb.close();
@@ -117,35 +119,28 @@ public class HDB_LUCITest {
 
 	@Test
 	public void testPutGetOut() {
-		for(int i=0; i< 1000; i++){
-			byte[] key = Util.packint(i);
-			String value = "foo"+i;
-		
-			hdb.put(key, Util.serialize(value));
+		for(Integer key=0; key< 1000; key++){
+			String value = "foo"+key;
+			hdb.put(key,value);
 		}
-		Util.serialize("foo");
 		
-		assertEquals(hdb.size(),1000);
+		assertEquals(1000,hdb.size());
 		
-		for(int i=0; i< 1000; i++){
-			byte[] key = Util.packint(i);
-			byte[] x = hdb.get(key);
-			String s = (String) Util.deserialize(x);
-			assertEquals("foo"+i,s);
+		for(Integer key=0; key< 1000; key++){
+			String x = (String) hdb.get(key);
+			assertEquals("foo"+key,x);
 		}
 		
 		assertEquals(hdb.size(),1000);
 		
-		for(int i=0; i< 1000; i++){
-			byte[] key = Util.packint(i);
+		for(Integer key=0; key< 1000; key++){
 			hdb.remove(key);
 		}
 		
 		assertEquals(hdb.size(),0);
 		
-		for(int i=0; i< 1000; i++){
-			byte[] key = Util.packint(i);
-			byte[] x = hdb.get(key);
+		for(Integer key=0; key< 1000; key++){
+			String x = (String) hdb.get(key);
 			assertTrue(x == null);
 		}
 	}
@@ -157,19 +152,18 @@ public class HDB_LUCITest {
 		int count = 0 ;
 		
 		@Override
-		protected void initialize(HDB_LUCI parent){
+		protected void initialize(DB_LUCI parent){
 			count = 100;
 		}
 		
 		@Override
-		protected void iterate(byte[] key,byte[] value) {
+		protected void iterate(Serializable key,Serializable value) {
 			count++;
-			String s = (String) Util.deserialize(value);
-			assertEquals("foo"+(Integer)Util.unpackint(key),s);
+			assertEquals("foo"+(Integer)key,(String)value);
 		}
 		
 		@Override
-		protected void shutdown(HDB_LUCI parent){
+		protected void shutdown(DB_LUCI parent){
 			count += 1000;
 		}
 		
@@ -178,10 +172,9 @@ public class HDB_LUCITest {
 	@Test
 	public void testIterate() {
 		
-		for(int i=0; i< 1000; i++){
-			byte[] key = Util.packint(i);
-			String value = "foo"+i;
-			hdb.put(key, Util.serialize(value));
+		for(Integer key=0; key< 1000; key++){
+			String value = "foo"+key;
+			hdb.put(key,value);
 		}
 		
 		CountEntry iw = new CountEntry();
@@ -201,10 +194,9 @@ public class HDB_LUCITest {
 		Runnable r = new Runnable(){
 			public void run() {
 				for(int j=0; j< 10; j++){
-					for(int i=0; i< 1000; i++){
-						byte[] key = Util.packint(i);
-						String value = "foo"+i;
-						hdb.put(key, Util.serialize(value));
+					for(Integer key=0; key< 1000; key++){
+						String value = "foo"+key;
+						hdb.put(key, value);
 						hdb.get(key);
 					}
 					CountEntry ce = new CountEntry();

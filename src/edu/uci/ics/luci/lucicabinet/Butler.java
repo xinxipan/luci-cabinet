@@ -3,6 +3,7 @@ package edu.uci.ics.luci.lucicabinet;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.Serializable;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
@@ -138,9 +139,9 @@ public class Butler implements Runnable{
 						/*Process the command */
 						if(command != null){
 							if(command.equals(Butler.ServerCommands.REMOVE)){
-								byte[] key= null;
+								Serializable key= null;
 								try {
-									key  = (byte[]) ois.readObject();
+									key  = (Serializable) ois.readObject();
 								} catch (IOException e) {
 									getLog().log(Level.ERROR, "Unable to read the key to remove from object input stream",e);
 									response += e.toString();
@@ -161,9 +162,9 @@ public class Butler implements Runnable{
 								}
 							}
 							else if(command.equals(Butler.ServerCommands.PUT)){
-								byte[] key= null;
+								Serializable key= null;
 								try {
-									key  = (byte[]) ois.readObject();
+									key  =  (Serializable) ois.readObject();
 								} catch (IOException e) {
 									getLog().log(Level.ERROR, "Unable to read the key to put from object input stream",e);
 									response += e.toString();
@@ -172,9 +173,9 @@ public class Butler implements Runnable{
 									response += e.toString();
 								}
 					
-								byte[] value = null;
+								Serializable value = null;
 								try {
-									value = (byte[]) ois.readObject();
+									value = (Serializable) ois.readObject();
 								} catch (IOException e) {
 									getLog().log(Level.ERROR, "Unable to read the value to put from object input stream",e);
 									response += e.toString();
@@ -193,9 +194,9 @@ public class Butler implements Runnable{
 								}
 							}
 							else if(command.equals(Butler.ServerCommands.GET)){
-								byte[] key= null;
+								Serializable key= null;
 								try {
-									key = (byte[]) ois.readObject();
+									key = (Serializable) ois.readObject();
 								} catch (IOException e) {
 									getLog().log(Level.ERROR, "Unable to read a key to get object input stream",e);
 									response += e.toString();
@@ -208,7 +209,7 @@ public class Butler implements Runnable{
 								}
 					
 								/*Execute get */
-								byte[] value = db.get(key);
+								Serializable value = db.get(key);
 								try {
 									oos.writeObject(value);
 								} catch (IOException e) {

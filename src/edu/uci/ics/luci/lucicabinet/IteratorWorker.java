@@ -29,15 +29,18 @@ import java.io.Serializable;
  */
 public class IteratorWorker implements Serializable{
 	
-	private static final long serialVersionUID = 8561619937201394728L;
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = -9210568925467264284L;
 
-	protected void initialize(HDB_LUCI parent){
+	protected void initialize(DB_LUCI parent){
 	}
 	
-	protected void iterate(byte[] key,byte[] value){
+	protected void iterate(Serializable key,Serializable value){
 	}
 	
-	protected void shutdown(HDB_LUCI parent){
+	protected void shutdown(DB_LUCI parent){
 	}
 
 }

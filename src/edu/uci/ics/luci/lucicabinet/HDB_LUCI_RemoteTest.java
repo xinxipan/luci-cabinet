@@ -5,6 +5,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
+import java.io.Serializable;
 import java.net.UnknownHostException;
 
 import org.apache.log4j.BasicConfigurator;
@@ -13,8 +14,6 @@ import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import tokyocabinet.Util;
 
 
 public class HDB_LUCI_RemoteTest {
@@ -108,28 +107,22 @@ public class HDB_LUCI_RemoteTest {
 
 	@Test
 	public void testPutGetOut() {
-		for(int i=0; i< 1000; i++){
-			byte[] key = Util.packint(i);
-			String value = "foo"+i;
-			
-			hdb_remote.put(key, Util.serialize(value));
+		for(Integer key=0; key< 1000; key++){
+			String value = "foo"+key;
+			hdb_remote.put(key, value);
 		}
 			
-		for(int i=0; i< 1000; i++){
-			byte[] key = Util.packint(i);
-			byte[] x = hdb_remote.get(key);
-			String s = (String) Util.deserialize(x);
-			assertEquals("foo"+i,s);
+		for(Integer key=0; key< 1000; key++){
+			String x = (String) hdb_remote.get(key);
+			assertEquals("foo"+key,x);
 		}
 			
-		for(int i=0; i< 1000; i++){
-			byte[] key = Util.packint(i);
+		for(Integer key=0; key< 1000; key++){
 			hdb_remote.remove(key);
 		}
 			
-		for(int i=0; i< 1000; i++){
-			byte[] key = Util.packint(i);
-			byte[] x = hdb_remote.get(key);
+		for(Integer key=0; key< 1000; key++){
+			Serializable x = hdb_remote.get(key);
 			assertTrue(x == null);
 		}
 	}
@@ -143,19 +136,18 @@ public class HDB_LUCI_RemoteTest {
 		int count = 0 ;
 			
 		@Override
-		protected void initialize(HDB_LUCI parent){
+		protected void initialize(DB_LUCI parent){
 			count = 100;
 		}
 			
 		@Override
-		protected void iterate(byte[] key,byte[] value) {
+		protected void iterate(Serializable key,Serializable value) {
 			count++;
-			String s = (String) Util.deserialize(value);
-			assertEquals("foo"+(Integer)Util.unpackint(key),s);
+			assertEquals("foo"+(Integer)key,(String) value);
 		}
 			
 		@Override
-		protected void shutdown(HDB_LUCI parent){
+		protected void shutdown(DB_LUCI parent){
 			count += 1000;
 		}
 	}
@@ -163,10 +155,9 @@ public class HDB_LUCI_RemoteTest {
 	@Test
 	public void testIterate() {
 			
-		for(int i=0; i< 1000; i++){
-			byte[] key = Util.packint(i);
-			String value = "foo"+i;
-			hdb_remote.put(key, Util.serialize(value));
+		for(Integer key=0; key< 1000; key++){
+			String value = "foo"+key;
+			hdb_remote.putSync(key, value);
 		}
 		assertEquals(1000,hdb_remote.size());
 			
@@ -188,16 +179,15 @@ public class HDB_LUCI_RemoteTest {
 		
 	@Test
 	public void testForDeadlock() {
-		final int number = 250;
+		final int number = 100;
 		
 		/*This finishes if there is no deadlock, this doesn't guarantee no deadlocks can happen though */
 		Runnable remote = new Runnable(){
 			public void run() {
 				for(int j=0; j< 10; j++){
-					for(int i=0; i< number; i++){
-						byte[] key = Util.packint(i);
-						String value = "foo"+i;
-						hdb_remote.put(key, Util.serialize(value));
+					for(Integer key=0; key< number; key++){
+						String value = "foo"+key;
+						hdb_remote.put(key, value);
 						hdb_remote.get(key);
 					}
 					CountEntry ce = new CountEntry();
@@ -210,11 +200,10 @@ public class HDB_LUCI_RemoteTest {
 		Runnable local = new Runnable(){
 			public void run() {
 				for(int j=0; j< 10; j++){
-					for(int i=0; i< number; i++){
-						byte[] key = Util.packint(i);
-						String value = "foo"+i;
-						hdb.put(key, Util.serialize(value));
-						hdb.get(key);
+					for(Integer key=0; key< number; key++){
+						String value = "foo"+key;
+						hdb_remote.put(key, value);
+						hdb_remote.get(key);
 					}
 					CountEntry ce = new CountEntry();
 					hdb.iterate(ce);
