@@ -10,6 +10,8 @@
 {{{
 package usecase;
 
+import static org.junit.Assert.fail;
+
 import java.io.IOException;
 import java.net.UnknownHostException;
 
@@ -42,10 +44,7 @@ public class UseCase4 {
 	public static void main(String[] args) throws UnknownHostException, IOException {
 		
 		/* Set up the server side database */
-		final HDB_LUCI hdbl = new HDB_LUCI();
-		
-		/* Open the server side database */
-		hdbl.open("usecase4.tch");
+		final HDB_LUCI hdbl = new HDB_LUCI("usecase4.tch");
 		
 		/* Create a service to receive commands on port 8181 */
 		Butler butler = new Butler(hdbl,8181,new TestAccessControl());
@@ -56,7 +55,7 @@ public class UseCase4 {
 		
 		final HDB_LUCI_Remote hdbl_remote = new HDB_LUCI_Remote("localhost",8181);
 		
-		final int number = 100;
+		final int number = 75;
 		
 		/*This finishes if there is no deadlock, this doesn't guarantee no deadlocks can happen though */
 		Runnable remote = new Runnable(){
@@ -85,26 +84,28 @@ public class UseCase4 {
 			}
 		};
 			
-		Thread[] t = new Thread[200];
-		for(int i =0; i< 200; i+=2){
+		final int threadnumber = 10;
+		Thread[] t = new Thread[threadnumber];
+		for(int i =0; i< threadnumber; i+=2){
 			t[i] = new Thread(remote);
 			t[i+1] = new Thread(local);
 		}
 			
 		long start = System.currentTimeMillis();
-		for(int i =0; i< 200; i++){
+		for(int i =0; i< threadnumber; i++){
 			t[i].start();
 		}
-		for(int i =0; i< 200; i++){
+		for(int i =0; i< threadnumber; i++){
 			try {
 				t[i].join();
 			} catch (InterruptedException e) {
+				fail("This shouldn't be interrupted"+e);
 			}
 		}
 		
 		double duration = System.currentTimeMillis()-start;
-		System.out.println(""+(100*10*number)+" local puts, "+(100*10*number)+" remote puts, "+(100*10*number)+" local gets, and "+(100*10*number)+" remote gets in "+duration+" milliseconds");
-		System.out.println(""+(duration/(2*((100*10*number)+(100*10*number))))+" milliseconds per operation");
+		System.out.println(""+(threadnumber*10*number)+" local puts, "+(threadnumber*10*number)+" remote puts, "+(threadnumber*10*number)+" local gets, and "+(threadnumber*10*number)+" remote gets in "+duration+" milliseconds");
+		System.out.println(""+(duration/(2*((threadnumber*10*number)+(threadnumber*10*number))))+" milliseconds per operation");
 
 		/*Clean up client side */
 		hdbl_remote.close();
@@ -117,11 +118,11 @@ public class UseCase4 {
 	}
 }
 
+
 }}}
 
 == Output ==
 {{{
-100000 local puts, 100000 remote puts, 100000 local gets, and 100000 remote gets in 70580.0 milliseconds
-0.17645 milliseconds per operation
-
+7500 local puts, 7500 remote puts, 7500 local gets, and 7500 remote gets in 2623.0 milliseconds
+0.08743333333333334 milliseconds per operation
 }}}
