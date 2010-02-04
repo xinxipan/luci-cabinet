@@ -19,11 +19,10 @@ public class UseCase1 {
 
 	public static void main(String[] args) {
 		
-		HDB_LUCI hdbl = new HDB_LUCI();
-		hdbl.open("usecase1.tch");
+		HDB_LUCI hdbl = new HDB_LUCI("usecase1.tch");
 		
 		String key = "foo";
-		String value = "bar";
+		String value = 	"bar";
 
 		hdbl.put(key,value);
 		System.out.println("Size:"+hdbl.size());
