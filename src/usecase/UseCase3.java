@@ -2,8 +2,9 @@ package usecase;
 
 import java.io.IOException;
 import java.net.UnknownHostException;
+import java.util.HashSet;
+import java.util.Set;
 
-import edu.uci.ics.luci.lucicabinet.AccessControl;
 import edu.uci.ics.luci.lucicabinet.Butler;
 import edu.uci.ics.luci.lucicabinet.DB_LUCI;
 import edu.uci.ics.luci.lucicabinet.HDB_LUCI;
@@ -14,29 +15,16 @@ import edu.uci.ics.luci.lucicabinet.HDB_LUCI_Remote;
  */
 public class UseCase3 {
 	
-	private static class TestAccessControl extends AccessControl{
-		@Override
-		public boolean allowSource(String source) {
-			if(source.equals("/127.0.0.1")){
-				return true;
-			}
-			else if(source.equals("127.0.0.1")){
-				return true;
-			}
-			else{
-				return false;
-			}
-		}
-	};
-
-
 	public static void main(String[] args) {
 		
 		/* Set up the server side database */
 		final DB_LUCI dbl = new HDB_LUCI("usecase3.tch");
 		
 		/* Create a service to receive commands on port 8181 */
-		Butler butler = new Butler(dbl,8181,new TestAccessControl());
+		Set<String> allowedConnections = new HashSet<String>(1);
+		allowedConnections.add("/127.0.0.1");
+		
+		Butler butler = new Butler(dbl,8181,new Butler.SimpleAccessControl(allowedConnections));
 		butler.initialize();
 		
 		/* Create the client side database interface which will talk over sockets to the 
