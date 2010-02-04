@@ -43,10 +43,7 @@ public class UseCase3 {
 	public static void main(String[] args) {
 		
 		/* Set up the server side database */
-		final DB_LUCI dbl = new HDB_LUCI();
-		
-		/* Open the server side database */
-		dbl.open("usecase3.tch");
+		final DB_LUCI dbl = new HDB_LUCI("usecase3.tch");
 		
 		/* Create a service to receive commands on port 8181 */
 		Butler butler = new Butler(dbl,8181,new TestAccessControl());
