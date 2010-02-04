@@ -28,7 +28,7 @@ public class Butler implements Runnable{
 	private ServerSocket serverSocket = null;
 	
 	private static transient volatile Logger log = null;
-	public Logger getLog(){
+	public static Logger getLog(){
 		if(log == null){
 			log = Logger.getLogger(Butler.class);
 		}
@@ -350,6 +350,12 @@ public class Butler implements Runnable{
 		}
 	}
 	
+	/**
+	 * This is a simple implementation of AccessControl that takes a list of allowed connections
+	 * in the constructor.  The object can then be passed to Butler for access control.
+	 * See Use Case 3 for an example of usage.
+	 *
+	 */
 	public static class SimpleAccessControl extends AccessControl{
 		private Set<String> whitelist;
 
@@ -364,6 +370,7 @@ public class Butler implements Runnable{
 					return true;
 				}
 			}
+			getLog().log(Level.INFO, this.getClass().getCanonicalName()+" rejected a connection from "+source);
 			return false;
 		}
 	}
