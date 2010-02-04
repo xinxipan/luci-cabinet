@@ -19,8 +19,7 @@ public class UseCase2 {
 
 	public static void main(String[] args) {
 		
-		final DB_LUCI bdbl = new BDB_LUCI();
-		bdbl.open("usecase2.tcb");
+		final DB_LUCI bdbl = new BDB_LUCI("usecase2.tcb");
 		
 		Runnable r = new Runnable(){
 			public void run() {
@@ -64,6 +63,6 @@ public class UseCase2 {
 
 == Output ==
 {{{
-1000000 puts and 1000000 gets in 69335.0 milliseconds
-0.0346675 milliseconds per operation
+1000000 puts and 1000000 gets in 57028.0 milliseconds
+0.028514 milliseconds per operation
 }}}
