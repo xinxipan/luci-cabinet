@@ -10,8 +10,7 @@ public class UseCase2 {
 
 	public static void main(String[] args) {
 		
-		final DB_LUCI bdbl = new BDB_LUCI();
-		bdbl.open("usecase2.tcb");
+		final DB_LUCI bdbl = new BDB_LUCI("usecase2.tcb");
 		
 		Runnable r = new Runnable(){
 			public void run() {

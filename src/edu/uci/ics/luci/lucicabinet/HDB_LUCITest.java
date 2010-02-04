@@ -23,13 +23,12 @@ public class HDB_LUCITest {
 	public static void tearDownAfterClass() throws Exception {
 	}
 
-	HDB_LUCI hdb = new HDB_LUCI();
+	HDB_LUCI hdb = null;
 	
 	@Before
 	public void setUp() throws Exception {
-		assertTrue(hdb != null);
 		try{
-			hdb.open("eraseme.tch");
+			hdb = new HDB_LUCI("eraseme.tch");
 		}
 		catch(RuntimeException e){
 			fail("This shouldn't throw an exception"+e);
@@ -40,13 +39,15 @@ public class HDB_LUCITest {
 
 	@After
 	public void tearDown() throws Exception {
-		hdb.iterate(new RemoveAll());
+		if(hdb != null){
+			hdb.iterate(new RemoveAll());
 
-		try{
-			hdb.close();
-		}
-		catch(RuntimeException e){
-			fail("This shouldn't throw an exception"+e);
+			try{
+				hdb.close();
+			}
+			catch(RuntimeException e){
+				fail("This shouldn't throw an exception"+e);
+			}
 		}
 	}
 	
@@ -75,9 +76,9 @@ public class HDB_LUCITest {
 
 	@Test
 	public void testOpenClose() {
-		HDB_LUCI hdb = new HDB_LUCI();
+		HDB_LUCI hdb = null;
 		try{
-			hdb.open("eraseme2.tch");
+			hdb = new HDB_LUCI("eraseme2.tch");
 		}
 		catch(RuntimeException e){
 			fail("This shouldn't throw an exception"+e);

@@ -15,12 +15,6 @@ public class BDB_LUCI extends DB_LUCI{
 	private BDB bdb = null;
 	private ReentrantReadWriteLock rwlock = null;
 
-	public BDB_LUCI() {
-		super();
-		bdb = new BDB();
-		rwlock = new ReentrantReadWriteLock(true);
-	}
-	
 	/** Open the database stored at the filePathName indicated.
 	 *  If the file doesn't exist it will be created. 
 	 * The file will be write locked while open by the file system. If the file is not closed the 
@@ -28,7 +22,10 @@ public class BDB_LUCI extends DB_LUCI{
 	 * 
 	 * @param filePathAndName The name of the file to open, e.g."eraseme.tch"
 	 */
-	public void open(String filePathAndName){
+	public BDB_LUCI(String filePathAndName){
+		super();
+		bdb = new BDB();
+		rwlock = new ReentrantReadWriteLock(true);
 		rwlock.writeLock().lock();
 		try{
 			if(bdb.open(filePathAndName,BDB.OWRITER | BDB.OCREAT)){

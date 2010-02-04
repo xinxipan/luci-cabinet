@@ -27,8 +27,6 @@ public class DB_LUCI_Remote extends DB_LUCI{
 	private ObjectInputStream ois = null;
 	public ExecutorService threadExecutor = null;
 	private ReentrantLock fairLock = null;
-	private String host = null;
-	private Integer port = null;
 	
 	private static transient volatile Logger log = null;
 	public Logger getLog(){
@@ -39,32 +37,19 @@ public class DB_LUCI_Remote extends DB_LUCI{
 	}
 	
 	/**
+	 * This method opens the connection to the remote Butler service. 
 	 * @param host The remote host to connect to, e.g. "localhost", "192.128.1.20"
 	 * @param port The port that the remote host is listening on.
 	 */
 	public DB_LUCI_Remote(String host,Integer port) {
 		super();
 		
-		this.host = host;
-		
-		this.port = port;
-		
 		threadExecutor = Executors.newCachedThreadPool();
 		
 		fairLock = new ReentrantLock(true);
-	}
 	
-	/**
-	 * This method opens the connection to the remote Butler service.  If the host connection is
-	 * non-null it overrides the host that was passed to the constructor.  If it is null, then the
-	 * constructor provided host is used.
-	 */
-	public void open(String newHost){
 		fairLock.lock();
 		try{
-			if(host != null){
-				this.host = newHost;
-			}
 			
 			clientSocket = new Socket(host,port);
 		
@@ -105,7 +90,7 @@ public class DB_LUCI_Remote extends DB_LUCI{
 	 * Gives all asynchronous operations up to 2 minutes to complete then tells the remote
 	 * server that this connection is shutting down, then cleans up all the resources created by this class. 
 	 */
-	protected void shutdown(){
+	protected synchronized void shutdown(){
 		
 		/*Let the current commands finish */
 		if(threadExecutor != null){

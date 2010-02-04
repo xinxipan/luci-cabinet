@@ -32,10 +32,7 @@ public class UseCase4 {
 	public static void main(String[] args) throws UnknownHostException, IOException {
 		
 		/* Set up the server side database */
-		final HDB_LUCI hdbl = new HDB_LUCI();
-		
-		/* Open the server side database */
-		hdbl.open("usecase4.tch");
+		final HDB_LUCI hdbl = new HDB_LUCI("usecase4.tch");
 		
 		/* Create a service to receive commands on port 8181 */
 		Butler butler = new Butler(hdbl,8181,new TestAccessControl());
