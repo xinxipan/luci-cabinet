@@ -8,8 +8,6 @@ import java.io.Serializable;
  */
 public abstract class DB_LUCI {
 	
-	public abstract void open(String string);
-
 	public abstract void remove(Serializable key);
 
 	public abstract void put(Serializable key, Serializable value);

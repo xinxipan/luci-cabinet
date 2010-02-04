@@ -15,12 +15,6 @@ public class HDB_LUCI extends DB_LUCI{
 	private HDB hdb = null;
 	private ReentrantReadWriteLock rwlock = null;
 
-	public HDB_LUCI() {
-		super();
-		hdb = new HDB();
-		rwlock = new ReentrantReadWriteLock(true);
-	}
-	
 	/** Open the database stored at the filePathName indicated.
 	 *  If the file doesn't exist it will be created. 
 	 * The file will be write locked while open by the file system. If the file is not closed the 
@@ -28,14 +22,18 @@ public class HDB_LUCI extends DB_LUCI{
 	 * 
 	 * @param filePathAndName The name of the file to open, e.g."eraseme.tch"
 	 */
-	public void open(String filePathAndName){
+	public HDB_LUCI(String filePathAndName) {
+		super();
+		hdb = new HDB();
+		rwlock = new ReentrantReadWriteLock(true);
+		
 		rwlock.writeLock().lock();
 		try{
 			if(hdb.open(filePathAndName,HDB.OWRITER | HDB.OCREAT)){
 				return;
 			}
 			else{
-				throw new RuntimeException("Error opening tokyo cabinet database, code:"+hdb.ecode());
+				throw new RuntimeException("Error opening tokyo cabinet database, code:"+hdb.ecode()+":"+hdb.errmsg());
 			}
 		}
 		finally{

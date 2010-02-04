@@ -38,7 +38,7 @@ public class Butler implements Runnable{
 	/**
 	 * Stop this butler service.
 	 */
-	public void shutdown(){
+	public synchronized void shutdown(){
 		shuttingDown = true;
 		if(serverSocket != null){
 			synchronized(serverSocket){

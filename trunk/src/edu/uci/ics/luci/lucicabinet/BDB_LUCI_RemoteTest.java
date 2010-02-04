@@ -48,10 +48,9 @@ public class BDB_LUCI_RemoteTest {
 
 	@Before
 	public void setUp() throws Exception {
-		bdbl = new BDB_LUCI();
 		
 		try{
-			bdbl.open("eraseme.tcb");
+			bdbl = new BDB_LUCI("eraseme.tcb");
 		}
 		catch(RuntimeException e){
 			fail("This shouldn't throw an exception"+e);
@@ -179,7 +178,7 @@ public class BDB_LUCI_RemoteTest {
 		
 	@Test
 	public void testForDeadlock() {
-		final int number = 100;
+		final int number = 50;
 		
 		/*This finishes if there is no deadlock, this doesn't guarantee no deadlocks can happen though */
 		Runnable remote = new Runnable(){
@@ -202,8 +201,8 @@ public class BDB_LUCI_RemoteTest {
 				for(int j=0; j< 10; j++){
 					for(Integer key=0; key< number; key++){
 						String value = "foo"+key;
-						bdbl_remote.put(key, value);
-						bdbl_remote.get(key);
+						bdbl.put(key, value);
+						bdbl.get(key);
 					}
 					CountEntry ce = new CountEntry();
 					bdbl.iterate(ce);
@@ -212,17 +211,18 @@ public class BDB_LUCI_RemoteTest {
 			}
 		};
 			
-		Thread[] t = new Thread[200];
-		for(int i =0; i< 200; i+=2){
+		final int threadnumber = 10;
+		Thread[] t = new Thread[threadnumber];
+		for(int i =0; i< threadnumber; i+=2){
 			t[i] = new Thread(remote);
 			t[i+1] = new Thread(local);
 		}
 			
 		long start = System.currentTimeMillis();
-		for(int i =0; i< 200; i++){
+		for(int i =0; i< threadnumber; i++){
 			t[i].start();
 		}
-		for(int i =0; i< 200; i++){
+		for(int i =0; i< threadnumber; i++){
 			try {
 				t[i].join();
 			} catch (InterruptedException e) {
@@ -231,8 +231,8 @@ public class BDB_LUCI_RemoteTest {
 		}
 		
 		double duration = System.currentTimeMillis()-start;
-		System.out.println(""+(100*10*number)+" local puts, "+(100*10*number)+" remote puts, "+(100*10*number)+" local gets, and "+(100*10*number)+" remote gets in "+duration+" milliseconds");
-		System.out.println(""+(duration/(2*((100*10*number)+(100*10*number))))+" milliseconds per operation");
+		System.out.println(""+(threadnumber*10*number)+" local puts, "+(threadnumber*10*number)+" remote puts, "+(threadnumber*10*number)+" local gets, and "+(threadnumber*10*number)+" remote gets in "+duration+" milliseconds");
+		System.out.println(""+(duration/(2*((threadnumber*10*number)+(threadnumber*10*number))))+" milliseconds per operation");
 		testIterate();
 	}
 }

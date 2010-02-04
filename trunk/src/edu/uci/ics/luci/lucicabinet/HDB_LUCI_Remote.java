@@ -29,7 +29,6 @@ public class HDB_LUCI_Remote extends DB_LUCI_Remote{
 	 */
 	public HDB_LUCI_Remote(String host,Integer port) throws UnknownHostException, IOException {
 		super(host,port);
-		open(host);
 	}
 
 }
