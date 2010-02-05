@@ -10,8 +10,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.ReentrantLock;
 
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
@@ -28,7 +28,8 @@ public class DB_LUCI_Remote extends DB_LUCI{
 	protected Socket clientSocket;
 	protected ObjectOutputStream oos = null;
 	protected ObjectInputStream ois = null;
-	protected ReentrantLock fairLock = null;
+	protected Semaphore fairExecutionSemaphore = null;
+	protected Semaphore fairSubmissionSemaphore = null;
 	
 	private static transient volatile Logger log = null;
 	public Logger getLog(){
@@ -47,13 +48,16 @@ public class DB_LUCI_Remote extends DB_LUCI{
 		super();
 		
 		/* This is kind of redundant with the locks, but oh well */
-		threadExecutor = Executors.newSingleThreadExecutor();
+		threadExecutor = Executors.newSingleThreadExecutor();			//0.13088 millliseconds per op
 		
-		fairLock = new ReentrantLock(true);
+		//threadExecutor = Executors.newCachedThreadPool();				//0.1477 milliseconds per op
+		
+		//threadExecutor = Executors.newFixedThreadPool(100);				//0.1506 milliseconds per op
+		
+		fairExecutionSemaphore = new Semaphore(1,true);
+		fairSubmissionSemaphore = new Semaphore(1,true);
 	
-		fairLock.lock();
 		try{
-			
 			clientSocket = new Socket(host,port);
 		
 			oos = new ObjectOutputStream(clientSocket.getOutputStream());
@@ -74,16 +78,12 @@ public class DB_LUCI_Remote extends DB_LUCI{
 		} catch (IOException e) {
 			getLog().log(Level.ERROR, "Unable to open connection",e);
 		}
-		finally{
-			fairLock.unlock();
-		}
-		
 	}
 	
-	@Override
 	/**
 	 * A wrapper for shutdown
 	 */
+	@Override
 	public void close() {
 		shutdown();
 	}
@@ -95,26 +95,27 @@ public class DB_LUCI_Remote extends DB_LUCI{
 	 */
 	protected synchronized void shutdown(){
 		
-		/*Let the current commands finish */
-		if(threadExecutor != null){
-			threadExecutor.shutdown();
-			try {
-				if(!threadExecutor.awaitTermination(120, TimeUnit.SECONDS)){
-					threadExecutor.shutdownNow();
-					if(!threadExecutor.awaitTermination(120, TimeUnit.SECONDS)){
-						getLog().log(Level.ERROR, "Thread pool did not terminate");
-					}
-				}
-			} catch (InterruptedException e) {
-				threadExecutor.shutdownNow();
-			}
-			
-			threadExecutor = null;
-		}
+		/* Shut down submissions */
+		fairSubmissionSemaphore.acquireUninterruptibly();
 		
-		/*Close the remote database */
-		fairLock.lock();
 		try{
+			/*Let the current commands finish */
+			if(threadExecutor != null){
+				threadExecutor.shutdown();
+				try {
+					if(!threadExecutor.awaitTermination(120, TimeUnit.SECONDS)){
+						threadExecutor.shutdownNow();
+						if(!threadExecutor.awaitTermination(120, TimeUnit.SECONDS)){
+							getLog().log(Level.ERROR, "Thread pool did not terminate");
+						}
+					}
+				} catch (InterruptedException e) {
+					threadExecutor.shutdownNow();
+				}
+				threadExecutor = null;
+			}
+		
+			/*Close the remote database */
 			if(oos != null){
 				try {
 					oos.writeObject(Butler.ServerCommands.CLOSE);
@@ -123,34 +124,35 @@ public class DB_LUCI_Remote extends DB_LUCI{
 				}
 				checkForError(ois);
 			}
+		
+			/* close the connections */
+			try {
+				if(ois != null){
+					ois.close();
+					ois = null;
+				}
+			} catch (IOException e) {
+			}
+		
+			try {
+				if(oos != null){
+					oos.close();
+					oos = null;
+				}
+			} catch (IOException e) {
+			}
+		
+			try {
+				if(clientSocket != null){
+					clientSocket.close();
+					clientSocket = null;
+				}
+			} catch (IOException e) {
+			}
+			
 		}
 		finally{
-			fairLock.unlock();
-		}
-		
-		/* close the connections */
-		try {
-			if(ois != null){
-				ois.close();
-				ois = null;
-			}
-		} catch (IOException e) {
-		}
-		
-		try {
-			if(oos != null){
-				oos.close();
-				oos = null;
-			}
-		} catch (IOException e) {
-		}
-		
-		try {
-			if(clientSocket != null){
-				clientSocket.close();
-				clientSocket = null;
-			}
-		} catch (IOException e) {
+			fairSubmissionSemaphore.release();
 		}
 		
 	}
@@ -170,13 +172,29 @@ public class DB_LUCI_Remote extends DB_LUCI{
 	
 	private class RemoveWrapper implements Runnable{
 		private Serializable key;
+		private Semaphore submission;
 
-		public RemoveWrapper(Serializable key){
+		public RemoveWrapper(Serializable key,Semaphore submission){
 			this.key = key;
+			this.submission = submission;
 		}
 		
 		public void run() {
-			fairLock.lock();
+			
+			boolean gotLock = false;
+			try {
+				gotLock = fairExecutionSemaphore.tryAcquire(0,TimeUnit.SECONDS);
+			} catch (InterruptedException e1) {
+			}
+			
+			submission.release();
+			
+			if(!gotLock){
+				/*Race condition right here, but I don't know how to ensure that we are in line for the fairExecutionLock before we
+				 * release the submission lock if we weren't able to get the lock immediately */
+				fairExecutionSemaphore.acquireUninterruptibly();
+			}
+			
 			try{
 				try {
 					oos.writeObject(Butler.ServerCommands.REMOVE);
@@ -193,7 +211,7 @@ public class DB_LUCI_Remote extends DB_LUCI{
 				checkForError(ois);
 			}
 			finally{
-				fairLock.unlock();
+				fairExecutionSemaphore.release();
 			}
 		};
 	}
@@ -203,7 +221,8 @@ public class DB_LUCI_Remote extends DB_LUCI{
 	 * @param key the entry to remove
 	 */
 	public void removeAsync(Serializable key) {
-		threadExecutor.execute(new RemoveWrapper(key));
+		fairSubmissionSemaphore.acquireUninterruptibly();
+		threadExecutor.execute(new RemoveWrapper(key,fairSubmissionSemaphore));
 	}
 	
 	/**
@@ -211,7 +230,8 @@ public class DB_LUCI_Remote extends DB_LUCI{
 	 * @param key the entry to remove
 	 */
 	public void removeSync(Serializable key) {
-		Future<?> f = threadExecutor.submit(new RemoveWrapper(key));
+		fairSubmissionSemaphore.acquireUninterruptibly();
+		Future<?> f = threadExecutor.submit(new RemoveWrapper(key,fairSubmissionSemaphore));
 		try {
 			f.get();
 		} catch (InterruptedException e) {
@@ -233,14 +253,30 @@ public class DB_LUCI_Remote extends DB_LUCI{
 	private class PutWrapper implements Runnable{
 		private Serializable key;
 		private Serializable value;
+		private Semaphore submission;
 
-		public PutWrapper(Serializable key,Serializable value){
+		public PutWrapper(Serializable key,Serializable value,Semaphore submission){
 			this.key = key;
 			this.value = value;
+			this.submission = submission;
 		}
 		
 		public void run() {
-			fairLock.lock();
+			
+			boolean gotLock = false;
+			try {
+				gotLock = fairExecutionSemaphore.tryAcquire(0,TimeUnit.SECONDS);
+			} catch (InterruptedException e1) {
+			}
+			
+			submission.release();
+			
+			if(!gotLock){
+				/*Race condition right here, but I don't know how to ensure that we are in line for the fairExecutionLock before we
+				 * release the submission lock if we weren't able to get the lock immediately */
+				fairExecutionSemaphore.acquireUninterruptibly();
+			}
+			
 			try{
 				try {
 					oos.writeObject(Butler.ServerCommands.PUT);
@@ -263,7 +299,7 @@ public class DB_LUCI_Remote extends DB_LUCI{
 				checkForError(ois);
 			}
 			finally{
-				fairLock.unlock();
+				fairExecutionSemaphore.release();
 			}
 		}
 	}
@@ -276,7 +312,8 @@ public class DB_LUCI_Remote extends DB_LUCI{
 	 * @param value
 	 */
 	public void putAsync(Serializable key,Serializable value) {
-		threadExecutor.execute(new PutWrapper(key,value));
+		fairSubmissionSemaphore.acquireUninterruptibly();
+		threadExecutor.execute(new PutWrapper(key,value,fairSubmissionSemaphore));
 	}
 	
 	/**
@@ -285,7 +322,8 @@ public class DB_LUCI_Remote extends DB_LUCI{
 	 * @param value
 	 */
 	public void putSync(Serializable key, Serializable value){
-		Future<?> f = threadExecutor.submit(new PutWrapper(key,value));
+		fairSubmissionSemaphore.acquireUninterruptibly();
+		Future<?> f = threadExecutor.submit(new PutWrapper(key,value,fairSubmissionSemaphore));
 		try {
 			f.get();
 		} catch (InterruptedException e) {
@@ -307,13 +345,29 @@ public class DB_LUCI_Remote extends DB_LUCI{
 	private class GetWrapper implements Runnable{
 		private Serializable key;
 		public Serializable result = null;
+		private Semaphore submission;
 
-		public GetWrapper(Serializable key){
+		public GetWrapper(Serializable key,Semaphore submission){
 			this.key = key;
+			this.submission = submission;
 		}
 		
 		public void run() {
-			fairLock.lock();
+
+			boolean gotLock = false;
+			try {
+				gotLock = fairExecutionSemaphore.tryAcquire(0,TimeUnit.SECONDS);
+			} catch (InterruptedException e1) {
+			}
+			
+			submission.release();
+			
+			if(!gotLock){
+				/*Race condition right here, but I don't know how to ensure that we are in line for the fairExecutionLock before we
+				 * release the submission lock if we weren't able to get the lock immediately */
+				fairExecutionSemaphore.acquireUninterruptibly();
+			}
+			
 			try{
 				try{
 					oos.writeObject(Butler.ServerCommands.GET);
@@ -339,7 +393,7 @@ public class DB_LUCI_Remote extends DB_LUCI{
 				
 			}
 			finally{
-				fairLock.unlock();
+				fairExecutionSemaphore.release();
 			}
 		};
 	}
@@ -351,7 +405,8 @@ public class DB_LUCI_Remote extends DB_LUCI{
 	 * @param key the entry to get
 	 */
 	public void getAsync(Serializable key) {
-		threadExecutor.execute(new GetWrapper(key));
+		fairSubmissionSemaphore.acquireUninterruptibly();
+		threadExecutor.execute(new GetWrapper(key,fairSubmissionSemaphore));
 	}
 	
 	/**
@@ -359,7 +414,8 @@ public class DB_LUCI_Remote extends DB_LUCI{
 	 * @param key the entry to get
 	 */
 	public Serializable getSync(Serializable key) {
-		GetWrapper g = new GetWrapper(key);
+		fairSubmissionSemaphore.acquireUninterruptibly();
+		GetWrapper g = new GetWrapper(key,fairSubmissionSemaphore);
 		Future<?> f = threadExecutor.submit(g);
 		try {
 			f.get();
@@ -384,15 +440,31 @@ public class DB_LUCI_Remote extends DB_LUCI{
 
 
 	private class IterateWrapper implements Runnable{
-		IteratorWorker iw = null;
+		IteratorWorker iw;
+		Semaphore submission;
 		IteratorWorker result = null;
 
-		public IterateWrapper(IteratorWorker iw){
+		public IterateWrapper(IteratorWorker iw,Semaphore submission){
 			this.iw = iw;
+			this.submission = submission;
 		}
 		
 		public void run() {
-			fairLock.lock();
+
+			boolean gotLock = false;
+			try {
+				gotLock = fairExecutionSemaphore.tryAcquire(0,TimeUnit.SECONDS);
+			} catch (InterruptedException e1) {
+			}
+			
+			submission.release();
+			
+			if(!gotLock){
+				/*Race condition right here, but I don't know how to ensure that we are in line for the fairExecutionLock before we
+				 * release the submission lock if we weren't able to get the lock immediately */
+				fairExecutionSemaphore.acquireUninterruptibly();
+			}
+			
 			try{
 				try {
 					oos.writeObject(Butler.ServerCommands.ITERATE);
@@ -417,7 +489,7 @@ public class DB_LUCI_Remote extends DB_LUCI{
 				checkForError(ois);
 			}
 			finally{
-				fairLock.unlock();
+				fairExecutionSemaphore.release();
 			}
 		};
 	}	
@@ -429,7 +501,8 @@ public class DB_LUCI_Remote extends DB_LUCI{
 	 * @param iw a class representing the work to be done.
 	 */
 	public void iterateAsync(IteratorWorker iw){
-		threadExecutor.execute(new IterateWrapper(iw));
+		fairSubmissionSemaphore.acquireUninterruptibly();
+		threadExecutor.execute(new IterateWrapper(iw,fairSubmissionSemaphore));
 	}
 
 	/**
@@ -440,7 +513,8 @@ public class DB_LUCI_Remote extends DB_LUCI{
 	 * @return the IteratorWorker after the work is complete.  
 	 */
 	public IteratorWorker iterateSync(IteratorWorker iw){
-		IterateWrapper wrapper = new IterateWrapper(iw);
+		fairSubmissionSemaphore.acquireUninterruptibly();
+		IterateWrapper wrapper = new IterateWrapper(iw,fairSubmissionSemaphore);
 		Future<?> f = threadExecutor.submit(wrapper);
 		try {
 			f.get();
@@ -465,9 +539,28 @@ public class DB_LUCI_Remote extends DB_LUCI{
 	
 	private class SizeWrapper implements Runnable{
 		Long result = null;
+		private Semaphore submission;
+		
+		SizeWrapper(Semaphore submission){
+			this.submission = submission;
+		}
 
 		public void run() {
-			fairLock.lock();
+
+			boolean gotLock = false;
+			try {
+				gotLock = fairExecutionSemaphore.tryAcquire(0,TimeUnit.SECONDS);
+			} catch (InterruptedException e1) {
+			}
+			
+			submission.release();
+			
+			if(!gotLock){
+				/*Race condition right here, but I don't know how to ensure that we are in line for the fairExecutionLock before we
+				 * release the submission lock if we weren't able to get the lock immediately */
+				fairExecutionSemaphore.acquireUninterruptibly();
+			}
+			
 			try{
 				try{
 					oos.writeObject(Butler.ServerCommands.SIZE);
@@ -487,7 +580,7 @@ public class DB_LUCI_Remote extends DB_LUCI{
 				
 			}
 			finally{
-				fairLock.unlock();
+				fairExecutionSemaphore.release();
 			}
 		};
 	}
@@ -496,7 +589,8 @@ public class DB_LUCI_Remote extends DB_LUCI{
 	 * The number of entries in the database.
 	 */
 	public Long size(){
-		SizeWrapper wrapper = new SizeWrapper();
+		fairSubmissionSemaphore.acquireUninterruptibly();
+		SizeWrapper wrapper = new SizeWrapper(fairSubmissionSemaphore);
 		Future<?> f = threadExecutor.submit(wrapper);
 		try {
 			f.get();
