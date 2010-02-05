@@ -211,7 +211,7 @@ public class HDB_LUCI_RemoteTest {
 			}
 		};
 			
-		final int threadnumber = 10;
+		final int threadnumber = 50;
 		Thread[] t = new Thread[threadnumber];
 		for(int i =0; i< threadnumber; i+=2){
 			t[i] = new Thread(remote);
