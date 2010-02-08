@@ -15,38 +15,49 @@ import java.util.concurrent.TimeUnit;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 
-import edu.uci.ics.luci.lucicabinet.Butler.ServerResponse;
+import edu.uci.ics.luci.lucicabinet.LUCI_Butler.ServerResponse;
 
 /**
  * This class enables synchronized and asynchronous access to a tokyo-cabinet database over a socket connection.
- * The expected use is that the remote end would be running the Butler class and that this class would connect to it.
+ * The expected use is that the remote end would be running the LUCI_Butler class and that this class would connect to it.
  * Jobs are guaranteed to be executed in the order submitted, but the underlying database is concurrent, so other clients
  * could change it in unexpected ways. 
+ * 
+ * Although the methods are synchronized to manage concurrent access to this object, the actual work of accessing the
+ * database is offloaded to a worker queue so that methods should return quickly. To support this, the put and remove interfaces
+ * behave differently than expected for Map as they always return null.  See the synchronous versions of those functions if you want the 
+ * result.
  */
-public class DB_LUCI_Remote extends DB_LUCI{
+public class LUCICabinetMap_Remote<K extends Serializable,V extends Serializable> extends LUCICabinetMap<K,V>{
 
-	private ExecutorService threadExecutor = null;
-	protected Socket clientSocket;
-	protected ObjectOutputStream oos = null;
-	protected ObjectInputStream ois = null;
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = 4761685555145105247L;
+	
+	private transient ExecutorService threadExecutor = null;
+	protected transient Socket clientSocket = null;
+	protected transient ObjectOutputStream oos = null;
+	protected transient ObjectInputStream ois = null;
 	
 	private static transient volatile Logger log = null;
-	public Logger getLog(){
+	public static Logger getLog(){
 		if(log == null){
-			log = Logger.getLogger(DB_LUCI_Remote.class);
+			log = Logger.getLogger(LUCICabinetMap_Remote.class);
 		}
 		return log;
 	}
 	
+	
 	/**
-	 * This method opens the connection to the remote Butler service. 
+	 * This method opens the connection to the remote LUCI_Butler service. 
 	 * @param host The remote host to connect to, e.g. "localhost", "192.128.1.20"
 	 * @param port The port that the remote host is listening on.
 	 */
-	public DB_LUCI_Remote(String host,Integer port) {
+	public LUCICabinetMap_Remote(String host,Integer port) {
 		super();
 		
-		threadExecutor = Executors.newSingleThreadExecutor();			//0.13088 millliseconds per op
+		threadExecutor = Executors.newSingleThreadExecutor();			
 		
 		try{
 			clientSocket = new Socket(host,port);
@@ -71,15 +82,18 @@ public class DB_LUCI_Remote extends DB_LUCI{
 		}
 	}
 	
+	
+	
 	/**
 	 * A wrapper for shutdown
 	 */
 	@Override
-	public void close() {
+	public synchronized void close() {
 		shutdown();
 	}
 	
-
+	
+	
 	/**
 	 * Gives all asynchronous operations up to 2 minutes to complete then tells
 	 * the remote server that this connection is shutting down, then cleans up
@@ -106,9 +120,9 @@ public class DB_LUCI_Remote extends DB_LUCI{
 		/* Close the remote database */
 		if (oos != null) {
 			try {
-				oos.writeObject(Butler.ServerCommands.CLOSE);
+				oos.writeObject(LUCI_Butler.ServerCommands.CLOSE);
 			} catch (IOException e) {
-				getLog().log( Level.ERROR, "Unable to write " + Butler.ServerCommands.CLOSE + " command", e);
+				getLog().log( Level.ERROR, "Unable to write " + LUCI_Butler.ServerCommands.CLOSE + " command", e);
 			}
 			checkForError(ois);
 		}
@@ -140,7 +154,8 @@ public class DB_LUCI_Remote extends DB_LUCI{
 
 	}
 	
-
+	
+	
 	/** Wrapper for shutdown to make sure all resources are clean up */
 	protected void finalize() throws Throwable{
 		try{
@@ -153,45 +168,62 @@ public class DB_LUCI_Remote extends DB_LUCI{
 		}
 	}
 	
+	
+	
+	
 	private class RemoveWrapper implements Runnable{
-		private Serializable key;
+		private Object key;
+		public V result;
 
-		public RemoveWrapper(Serializable key){
+		public RemoveWrapper(Object key){
 			this.key = key;
 		}
 		
+		@SuppressWarnings("unchecked")
 		public void run() {
 			
 			try {
-				oos.writeObject(Butler.ServerCommands.REMOVE);
+				oos.writeObject(LUCI_Butler.ServerCommands.REMOVE);
 			} catch (IOException e) {
-				getLog().log(Level.ERROR, "Unable to write "+Butler.ServerCommands.REMOVE+" command",e);
+				getLog().log(Level.ERROR, "Unable to write "+LUCI_Butler.ServerCommands.REMOVE+" command",e);
 			}
 		
 			try {
 				oos.writeObject(key);
 			} catch (IOException e) {
-				getLog().log(Level.ERROR, "Unable to write "+Butler.ServerCommands.REMOVE+" command parameter",e);
+				getLog().log(Level.ERROR, "Unable to write "+LUCI_Butler.ServerCommands.REMOVE+" command parameter",e);
+			}
+			
+			try {
+				result = (V) ois.readObject();
+			} catch (IOException e) {
+				getLog().log(Level.ERROR, "Unable to read a result from object input stream",e);
+			} catch (ClassNotFoundException e) {
+				getLog().log(Level.ERROR, "Unable to read a result from object input stream",e);
 			}
 				
 			checkForError(ois);
 		};
 	}
 	
+	
+	
 	/**
 	 * An asynchronous remove command. Runs on a separate thread.
 	 * @param key the entry to remove
 	 */
-	public void removeAsync(Serializable key) {
+	public synchronized void removeAsync(Object key) {
 		threadExecutor.execute(new RemoveWrapper(key));
 	}
 	
 	/**
 	 * An synchronous remove command. Runs on a separate thread, blocks until it is done.
 	 * @param key the entry to remove
+	 * @return the value that was removed
 	 */
-	public void removeSync(Serializable key) {
-		Future<?> f = threadExecutor.submit(new RemoveWrapper(key));
+	public synchronized V removeSync(Object key) {
+		RemoveWrapper iw = new RemoveWrapper(key);
+		Future<?> f = threadExecutor.submit(iw);
 		try {
 			f.get();
 		} catch (InterruptedException e) {
@@ -199,44 +231,58 @@ public class DB_LUCI_Remote extends DB_LUCI{
 		} catch (ExecutionException e) {
 			getLog().log(Level.ERROR, "Remove failed",e);
 		}
+		return iw.result;
 	}
 	
 	/**
 	 * Remove an entry from the database asynchronously. 
 	 * @param key The entry to remove.
+	 * @return the return value is always null.  If you actually want the value removed, use removeSync
 	 */
-	public void remove(Serializable key){
+	public synchronized V remove(Object key){
 		removeAsync(key);
+		return null;
 	}
 	
 
 	private class PutWrapper implements Runnable{
-		private Serializable key;
-		private Serializable value;
+		private K key;
+		private V value;
+		public V result;
 
-		public PutWrapper(Serializable key,Serializable value){
+		public PutWrapper(K key,V value){
 			this.key = key;
 			this.value = value;
 		}
 		
+		@SuppressWarnings("unchecked")
 		public void run() {
 			
 			try {
-				oos.writeObject(Butler.ServerCommands.PUT);
+				oos.writeObject(LUCI_Butler.ServerCommands.PUT);
 			} catch (IOException e) {
-				getLog().log(Level.ERROR, "Unable to write "+Butler.ServerCommands.PUT+" command",e);
+				getLog().log(Level.ERROR, "Unable to write "+LUCI_Butler.ServerCommands.PUT+" command",e);
 			}
 		
 			try {
 				oos.writeObject(key);
 			} catch (IOException e) {
-				getLog().log(Level.ERROR, "Unable to write "+Butler.ServerCommands.PUT+" command parameter,key",e);
+				getLog().log(Level.ERROR, "Unable to write "+LUCI_Butler.ServerCommands.PUT+" command parameter,key",e);
 			}
 		
 			try {
 				oos.writeObject(value);
 			} catch (IOException e) {
-				getLog().log(Level.ERROR, "Unable to write "+Butler.ServerCommands.PUT+" command parameter,value",e);
+				getLog().log(Level.ERROR, "Unable to write "+LUCI_Butler.ServerCommands.PUT+" command parameter,value",e);
+			}
+			
+
+			try {
+				result = (V) ois.readObject();
+			} catch (IOException e) {
+				getLog().log(Level.ERROR, "Unable to read a result from object input stream",e);
+			} catch (ClassNotFoundException e) {
+				getLog().log(Level.ERROR, "Unable to read a result from object input stream",e);
 			}
 		
 			checkForError(ois);
@@ -250,7 +296,7 @@ public class DB_LUCI_Remote extends DB_LUCI{
 	 * @param key
 	 * @param value
 	 */
-	public void putAsync(Serializable key,Serializable value) {
+	public synchronized void putAsync(K key,V value) {
 		threadExecutor.execute(new PutWrapper(key,value));
 	}
 	
@@ -259,8 +305,9 @@ public class DB_LUCI_Remote extends DB_LUCI{
 	 * @param key
 	 * @param value
 	 */
-	public void putSync(Serializable key, Serializable value){
-		Future<?> f = threadExecutor.submit(new PutWrapper(key,value));
+	public synchronized V putSync(K key, V value){
+		PutWrapper pw = new PutWrapper(key,value);
+		Future<?> f = threadExecutor.submit(pw);
 		try {
 			f.get();
 		} catch (InterruptedException e) {
@@ -268,40 +315,46 @@ public class DB_LUCI_Remote extends DB_LUCI{
 		} catch (ExecutionException e) {
 			getLog().log(Level.ERROR, "Put failed",e);
 		}
+		return(pw.result);
 	}
 	
 
 	/**
-	 * Put an entry into the database asynchronously. 
+	 * Put a key value pair in the database asynchronously 
+	 * @param key
+	 * @param value
+	 * @return always returns null.  If you want the value that is overwritten as per the Map interface, try using putAsync instead.
 	 */
-	public void put(Serializable key,Serializable value){
+	public synchronized V put(K key,V value){
 		putAsync(key,value);
+		return(null);
 	}
 	
 
 	private class GetWrapper implements Runnable{
-		private Serializable key;
-		public Serializable result = null;
+		private Object key;
+		public V result = null;
 
-		public GetWrapper(Serializable key){
+		public GetWrapper(Object key){
 			this.key = key;
 		}
 		
+		@SuppressWarnings("unchecked")
 		public void run() {
 			try{
-				oos.writeObject(Butler.ServerCommands.GET);
+				oos.writeObject(LUCI_Butler.ServerCommands.GET);
 			} catch (IOException e) {
-				getLog().log(Level.ERROR, "Unable to write "+Butler.ServerCommands.GET+" command",e);
+				getLog().log(Level.ERROR, "Unable to write "+LUCI_Butler.ServerCommands.GET+" command",e);
 			}
 			
 			try {
 				oos.writeObject(key);
 			} catch (IOException e) {
-				getLog().log(Level.ERROR, "Unable to write "+Butler.ServerCommands.GET+" command parameter, key",e);
+				getLog().log(Level.ERROR, "Unable to write "+LUCI_Butler.ServerCommands.GET+" command parameter, key",e);
 			}
 			
 			try {
-				result = (Serializable) ois.readObject();
+				result = (V) ois.readObject();
 			} catch (IOException e) {
 				getLog().log(Level.ERROR, "Unable to read a result from object input stream",e);
 			} catch (ClassNotFoundException e) {
@@ -319,7 +372,7 @@ public class DB_LUCI_Remote extends DB_LUCI{
 	 * why anyone would want this.
 	 * @param key the entry to get
 	 */
-	public void getAsync(Serializable key) {
+	public synchronized void getAsync(K key) {
 		threadExecutor.execute(new GetWrapper(key));
 	}
 	
@@ -327,7 +380,7 @@ public class DB_LUCI_Remote extends DB_LUCI{
 	 * An synchronous get command. Runs on a separate thread, blocks until it is done.
 	 * @param key the entry to get
 	 */
-	public Serializable getSync(Serializable key) {
+	public synchronized V getSync(Object key) {
 		GetWrapper g = new GetWrapper(key);
 		Future<?> f = threadExecutor.submit(g);
 		try {
@@ -346,36 +399,43 @@ public class DB_LUCI_Remote extends DB_LUCI{
 	 * @param key
 	 * @return the value in the database. null if there is no entry
 	 */
-	public Serializable get(Serializable key){
+	public synchronized V get(Object key){
 		return(getSync(key));
 	}
 	
 
-
 	private class IterateWrapper implements Runnable{
-		IteratorWorker iw;
-		IteratorWorker result = null;
+		IteratorWorker<K,V> result = null;
+		private Class<? extends IteratorWorker<K, V>> iw = null;
+		private IteratorWorkerConfig iwc = null;
 
-		public IterateWrapper(IteratorWorker iw){
+		public IterateWrapper(Class<? extends IteratorWorker<K, V>> iw, IteratorWorkerConfig iwc){
 			this.iw = iw;
+			this.iwc = iwc;
 		}
 		
+		@SuppressWarnings("unchecked")
 		public void run() {
-
 			try {
-				oos.writeObject(Butler.ServerCommands.ITERATE);
+				oos.writeObject(LUCI_Butler.ServerCommands.ITERATE);
 			} catch (IOException e) {
-				getLog().log(Level.ERROR, "Unable to write "+Butler.ServerCommands.ITERATE+" command",e);
+				getLog().log(Level.ERROR, "Unable to write "+LUCI_Butler.ServerCommands.ITERATE+" command",e);
 			}
 				
 			try {
-				oos.writeObject(iw);
+				oos.writeObject(this.iw);
 			} catch (IOException e) {
-				getLog().log(Level.ERROR, "Unable to write "+Butler.ServerCommands.ITERATE+" parameter, iw",e);
+				getLog().log(Level.ERROR, "Unable to write "+LUCI_Butler.ServerCommands.ITERATE+" parameter, iw",e);
+			}
+			
+			try {
+				oos.writeObject(this.iwc);
+			} catch (IOException e) {
+				getLog().log(Level.ERROR, "Unable to write "+LUCI_Butler.ServerCommands.ITERATE+" parameter, iwc",e);
 			}
 
 			try {
-				result = (IteratorWorker) ois.readObject();
+				result = (IteratorWorker<K,V>) ois.readObject();
 			} catch (IOException e) {
 				getLog().log(Level.ERROR, "Unable to read a result from object input stream",e);
 			} catch (ClassNotFoundException e) {
@@ -392,8 +452,8 @@ public class DB_LUCI_Remote extends DB_LUCI{
 	 *  internal state of iw is never changed because it is sent remotely to do it's work.
 	 * @param iw a class representing the work to be done.
 	 */
-	public void iterateAsync(IteratorWorker iw){
-		threadExecutor.execute(new IterateWrapper(iw));
+	public synchronized void iterateASync(Class<? extends IteratorWorker<K, V>> iw, IteratorWorkerConfig iwc) throws InstantiationException, IllegalAccessException {
+		threadExecutor.execute(new IterateWrapper(iw,iwc));
 	}
 
 	/**
@@ -403,8 +463,8 @@ public class DB_LUCI_Remote extends DB_LUCI{
 	 * @param iw a class representing the work to be done.
 	 * @return the IteratorWorker after the work is complete.  
 	 */
-	public IteratorWorker iterateSync(IteratorWorker iw){
-		IterateWrapper wrapper = new IterateWrapper(iw);
+	public synchronized IteratorWorker<K, V> iterateSync(Class<? extends IteratorWorker<K, V>> iw, IteratorWorkerConfig iwc) throws InstantiationException, IllegalAccessException {
+		IterateWrapper wrapper = new IterateWrapper(iw,iwc);
 		Future<?> f = threadExecutor.submit(wrapper);
 		try {
 			f.get();
@@ -420,10 +480,12 @@ public class DB_LUCI_Remote extends DB_LUCI{
 	/** Synchronously iterate over the entries in the database and call the appropriate methods in <param>iw</param>
 	 * to do work.  See IteratorWorker for details on how the iteration works.  If there no information needs to be returned or
 	 * collected, consider using <pre>iterateAsync</pre>.
-	 * @param iw
+	 * @param iw The class to do the work
+	 * @param iwc Any configuration data to pass the class iw once it is instantiated
 	 */
-	public IteratorWorker iterate(IteratorWorker iw){
-		return(iterateSync(iw));
+	@Override
+	public IteratorWorker<K, V> iterate(Class<? extends IteratorWorker<K, V>> iw, IteratorWorkerConfig iwc) throws InstantiationException, IllegalAccessException {
+		return(iterateSync(iw,iwc));
 	}
 	
 	
@@ -433,9 +495,9 @@ public class DB_LUCI_Remote extends DB_LUCI{
 		public void run() {
 
 			try{
-				oos.writeObject(Butler.ServerCommands.SIZE);
+				oos.writeObject(LUCI_Butler.ServerCommands.SIZE);
 			} catch (IOException e) {
-				getLog().log(Level.ERROR, "Unable to write "+Butler.ServerCommands.SIZE+" command",e);
+				getLog().log(Level.ERROR, "Unable to write "+LUCI_Butler.ServerCommands.SIZE+" command",e);
 			}
 			
 			try {
@@ -454,7 +516,7 @@ public class DB_LUCI_Remote extends DB_LUCI{
 	/**
 	 * The number of entries in the database.
 	 */
-	public Long size(){
+	public synchronized Long sizeLong(){
 		SizeWrapper wrapper = new SizeWrapper();
 		Future<?> f = threadExecutor.submit(wrapper);
 		try {
@@ -493,7 +555,5 @@ public class DB_LUCI_Remote extends DB_LUCI{
 		
 		throw new RuntimeException("Bad Response from server:"+okay);
 	}
-	
-
 
 }

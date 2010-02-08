@@ -8,9 +8,16 @@ import tokyocabinet.Util;
 
 /**
 	 * This is a class which creates a synchronized (thread-safe) key-value store backed by 
-	 * a tokyo cabinet B-Tree Database (BDB). 
+	 * a tokyo cabinet B-Tree Database (BDB).
+	 * K is the key type
+	 * V is the value type
 */
-public class BDB_LUCI extends DB_LUCI{
+public class LUCICabinetBDB<K extends Serializable,V extends Serializable> extends LUCICabinetMap<K,V>{
+	
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = 1435393836919236897L;
 	
 	private BDB bdb = null;
 	private ReentrantReadWriteLock rwlock = null;
@@ -22,17 +29,18 @@ public class BDB_LUCI extends DB_LUCI{
 	 * 
 	 * @param filePathAndName The name of the file to open, e.g."eraseme.tch"
 	 */
-	public BDB_LUCI(String filePathAndName){
+	public LUCICabinetBDB(String filePathAndName){
 		super();
 		bdb = new BDB();
 		rwlock = new ReentrantReadWriteLock(true);
+		
 		rwlock.writeLock().lock();
 		try{
 			if(bdb.open(filePathAndName,BDB.OWRITER | BDB.OCREAT)){
 				return;
 			}
 			else{
-				throw new RuntimeException("Error opening tokyo cabinet database, code:"+bdb.ecode());
+				throw new RuntimeException("Error opening tokyo cabinet database, code:"+bdb.ecode()+":"+bdb.errmsg());
 			}
 		}
 		finally{
@@ -40,17 +48,20 @@ public class BDB_LUCI extends DB_LUCI{
 		}
 	}
 	
+	
+	
 	/**
 	 * Remove an entry from the database.  If the record doesn't exist nothing happens.
 	 * @param key The entry to remove.
+	 * @return the removed value
 	 */
-	public void remove(Serializable key){
+	@Override
+	public V remove(Object key){
+		V ret = null;
 		rwlock.writeLock().lock();
 		try{
-			if(bdb.out(Util.serialize(key))){
-				return;
-			}
-			else{
+			ret = get(key);
+			if(!bdb.out(Util.serialize(key))){
 				if(bdb.ecode() != BDB.ENOREC){
 					throw new RuntimeException("Error removing element from tokyo cabinet database, code:"+bdb.ecode());
 				}
@@ -59,39 +70,48 @@ public class BDB_LUCI extends DB_LUCI{
 		finally{
 			rwlock.writeLock().unlock();
 		}
+		return ret;
 	}
+	
+	
 	
 	/**
 	 * Put an entry into the database
 	 * @param key
 	 * @param value
+	 * @return The value previously associated with key, or null
 	 */
-	public void put(Serializable key, Serializable value){
+	@Override
+	public V put(K key, V value){
+		V ret = null;
 		rwlock.writeLock().lock();
 		try{
-			if (bdb.put(Util.serialize(key),Util.serialize(value))){
-				return;
-			}
-			else{
+			ret = get(key);
+			if (!bdb.put(Util.serialize(key),Util.serialize(value))){
 				throw new RuntimeException("Error putting an element in tokyo cabinet database, code:"+bdb.ecode());
 			}
 		}
 		finally{
 			rwlock.writeLock().unlock();
 		}
+		return ret;
 	}
+	
+	
 	
 	/** Get an entry from the database
 	 * 
 	 * @param key
 	 * @return the value. null if there is no entry
 	 */
-	public Serializable get(Serializable key){
+	@SuppressWarnings("unchecked")
+	@Override
+	public V get(Object key){
 		rwlock.readLock().lock();
 		try{
 			byte[] value = bdb.get(Util.serialize(key));
 			if(value != null){
-				return (Serializable) (Util.deserialize(value));
+				return (V) (Util.deserialize(value));
 			}
 			else{
 				return null;
@@ -102,14 +122,23 @@ public class BDB_LUCI extends DB_LUCI{
 		}
 	}
 	
+	
+	
+	
 	/** Iterate over the entries in the database and call the appropriate methods in <param>iw</param>
 	 * to do work.  See IteratorWorker for details on how the iteration works.
 	 * @param iw
+	 * @throws IllegalAccessException 
+	 * @throws InstantiationException 
 	 */
-	public IteratorWorker iterate(IteratorWorker iw){
+	@SuppressWarnings("unchecked")
+	public IteratorWorker<K,V> iterate(Class<? extends IteratorWorker<K,V>> iwClass,IteratorWorkerConfig iwConfig) throws InstantiationException, IllegalAccessException{
+		
+		IteratorWorker<K,V> iw = iwClass.newInstance();
+		
 		rwlock.writeLock().lock();
 		try{
-			iw.initialize(this);
+			iw.initialize(this,iwConfig);
 		}
 		finally{
 			rwlock.readLock().lock();
@@ -118,12 +147,15 @@ public class BDB_LUCI extends DB_LUCI{
 		
 		try{
 			boolean x = bdb.iterinit();
+			boolean keepGoing = true;
 			if(x){
 				byte[] _key;
-				while ((_key = bdb.iternext()) != null) {
-					Serializable key = (Serializable) Util.deserialize(_key);
-					Serializable value = (Serializable) Util.deserialize(bdb.get(_key));
-					iw.iterate(key,value);
+				while (keepGoing && ((_key = bdb.iternext()) != null)) {
+					K key = (K) Util.deserialize(_key);
+					V value = (V) Util.deserialize(bdb.get(_key));
+					if(iw.iterate(key,value)){
+						keepGoing = false;
+					}
 				}
 			}
 		}
@@ -142,16 +174,19 @@ public class BDB_LUCI extends DB_LUCI{
 	}
 	
 	
-	/** Close the database. This must be done to ensure database is not damaged on disk after being opened.
+	
+	
+	/**
+	 *  Close the database. This must be done to ensure database is not damaged on disk after being opened.
 	 */
 	public void close(){
 		rwlock.writeLock().lock();
 		try{
-			if(bdb.close()){
-				return;
-			}
-			else{
-				throw new RuntimeException("Error closing a tokyo cabinet database, code:"+bdb.ecode()+":"+bdb.errmsg());
+			if(bdb != null){
+				if(!bdb.close()){
+					throw new RuntimeException("Error closing a tokyo cabinet database, code:"+bdb.ecode()+":"+bdb.errmsg());
+				}
+				bdb = null;
 			}
 		}
 		finally{
@@ -159,10 +194,12 @@ public class BDB_LUCI extends DB_LUCI{
 		}
 	}
 	
+	
+	
 	/**
 	 * Return the number of records in the database.
 	 */
-	public Long size(){
+	public Long sizeLong(){
 		rwlock.readLock().lock();
 		try{
 			return(bdb.rnum());
@@ -171,5 +208,5 @@ public class BDB_LUCI extends DB_LUCI{
 			rwlock.readLock().unlock();
 		}
 	}
-	
+
 }

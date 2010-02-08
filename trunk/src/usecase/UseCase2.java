@@ -1,7 +1,7 @@
 package usecase;
 
-import edu.uci.ics.luci.lucicabinet.BDB_LUCI;
-import edu.uci.ics.luci.lucicabinet.DB_LUCI;
+import edu.uci.ics.luci.lucicabinet.LUCICabinetBDB;
+import edu.uci.ics.luci.lucicabinet.LUCICabinetMap;
 
 /**
  *  This class implements Use Case 2
@@ -10,7 +10,7 @@ public class UseCase2 {
 
 	public static void main(String[] args) {
 		
-		final DB_LUCI bdbl = new BDB_LUCI("usecase2.tcb");
+		final LUCICabinetMap<Integer,String> bdbl = new LUCICabinetBDB<Integer,String>("usecase2.tcb");
 		
 		Runnable r = new Runnable(){
 			public void run() {
