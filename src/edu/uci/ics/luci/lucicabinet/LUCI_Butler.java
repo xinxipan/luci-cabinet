@@ -13,24 +13,24 @@ import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 
 /**
- * Butler is a class that provides socket access to a HDB_LUCI database.
+ * LUCI_Butler is a class that provides socket access to a LUCI_HDB database.
  * See the code for UseCase 3 and 4
  *
  */
-public class Butler implements Runnable{
+public class LUCI_Butler<K extends Serializable,V extends Serializable> implements Runnable{
 	
 	enum ServerCommands {PUT,GET,REMOVE,ITERATE, CLOSE, SIZE};
 	enum ServerResponse {CONNECTION_OKAY,COMMAND_SUCCESSFUL,COMMAND_FAILED};
 	
 	private boolean shuttingDown = false;
-	protected DB_LUCI db;
+	protected LUCICabinetMap<K,V> db;
 	protected AccessControl checker;
 	private ServerSocket serverSocket = null;
 	
 	private static transient volatile Logger log = null;
 	public static Logger getLog(){
 		if(log == null){
-			log = Logger.getLogger(Butler.class);
+			log = Logger.getLogger(LUCI_Butler.class);
 		}
 		return log;
 	}
@@ -58,7 +58,7 @@ public class Butler implements Runnable{
 	 * @param port The port to accept commands on
 	 * @param checker An object which tells us which connections are allowed
 	 */
-	public Butler(DB_LUCI db,int port,AccessControl checker){
+	public LUCI_Butler(LUCICabinetMap<K,V> db,int port,AccessControl checker){
 		this.db = db;
 		this.checker = checker;
 		try {
@@ -73,11 +73,11 @@ public class Butler implements Runnable{
 	 */
 	public void initialize(){
 		if(serverSocket == null){
-			throw new RuntimeException("Unable to start Butler object");
+			throw new RuntimeException("Unable to start LUCI_Butler object");
 		}
 		
 		Thread t = new Thread(this);
-		t.setName("Butler Socket Accept Thread");
+		t.setName("LUCI_Butler Socket Accept Thread");
 		t.setDaemon(false); /*Force an explicit shutdown call */
 		t.start();
 	}
@@ -88,9 +88,9 @@ public class Butler implements Runnable{
 
 		public Handler(Socket clientSocket){
 			this.clientSocket = clientSocket;
-			
 		}
 
+		@SuppressWarnings("unchecked")
 		public void run() {
 			boolean done = false;
 			ObjectInputStream ois = null;
@@ -128,7 +128,7 @@ public class Butler implements Runnable{
 						/* Get the command */
 						ServerCommands command = null;
 						try {
-							command = (Butler.ServerCommands) ois.readObject();
+							command = (LUCI_Butler.ServerCommands) ois.readObject();
 						} catch (IOException e) {
 							getLog().log(Level.ERROR, "Unable to read a command from object input stream",e);
 							response += e;
@@ -139,10 +139,10 @@ public class Butler implements Runnable{
 					
 						/*Process the command */
 						if(command != null){
-							if(command.equals(Butler.ServerCommands.REMOVE)){
+							if(command.equals(LUCI_Butler.ServerCommands.REMOVE)){
 								Serializable key= null;
 								try {
-									key  = (Serializable) ois.readObject();
+									key  = (K) ois.readObject();
 								} catch (IOException e) {
 									getLog().log(Level.ERROR, "Unable to read the key to remove from object input stream",e);
 									response += e.toString();
@@ -153,19 +153,27 @@ public class Butler implements Runnable{
 					
 								if(key != null){
 									/*Execute remove */
+									V thing = null;
 									try{
-										db.remove(key);
+										thing = db.remove(key);
 									}
 									catch(RuntimeException e){
 										getLog().log(Level.ERROR, "Unable to read the remove object from database",e);
 										response += e.toString();
 									}
+
+									try {
+										oos.writeObject(thing);
+									} catch (IOException e) {
+										getLog().log(Level.ERROR, "Unable to write a result to object output stream",e);
+										response += e.toString();
+									}
 								}
 							}
-							else if(command.equals(Butler.ServerCommands.PUT)){
-								Serializable key= null;
+							else if(command.equals(LUCI_Butler.ServerCommands.PUT)){
+								K key= null;
 								try {
-									key  =  (Serializable) ois.readObject();
+									key  =  (K) ois.readObject();
 								} catch (IOException e) {
 									getLog().log(Level.ERROR, "Unable to read the key to put from object input stream",e);
 									response += e.toString();
@@ -174,9 +182,9 @@ public class Butler implements Runnable{
 									response += e.toString();
 								}
 					
-								Serializable value = null;
+								V value = null;
 								try {
-									value = (Serializable) ois.readObject();
+									value = (V) ois.readObject();
 								} catch (IOException e) {
 									getLog().log(Level.ERROR, "Unable to read the value to put from object input stream",e);
 									response += e.toString();
@@ -186,15 +194,25 @@ public class Butler implements Runnable{
 								}
 				
 								/*Execute put */
+								V thing = null;
+
 								try{
-									db.put(key,value);
+									thing = db.put(key,value);
 								}
 								catch(RuntimeException e){
 									getLog().log(Level.ERROR, "Unable to put key-value pair into database",e);
 									response += e.toString();
 								}
+								
+								try {
+									oos.writeObject(thing);
+								} catch (IOException e) {
+									getLog().log(Level.ERROR, "Unable to write a result to object output stream",e);
+									response += e.toString();
+								}
+								
 							}
-							else if(command.equals(Butler.ServerCommands.GET)){
+							else if(command.equals(LUCI_Butler.ServerCommands.GET)){
 								Serializable key= null;
 								try {
 									key = (Serializable) ois.readObject();
@@ -218,10 +236,10 @@ public class Butler implements Runnable{
 									response += e.toString();
 								}
 							}
-							else if(command.equals(Butler.ServerCommands.ITERATE)){
-								IteratorWorker iw= null;
+							else if(command.equals(LUCI_Butler.ServerCommands.ITERATE)){
+								Class<? extends IteratorWorker> iwClass= null;
 								try {
-									iw  = (IteratorWorker) ois.readObject();
+									iwClass  = (Class<? extends IteratorWorker>) ois.readObject();
 								} catch (IOException e) {
 									getLog().log(Level.ERROR, "Unable to read an Iterator Worker from object input stream",e);
 									response += e.toString();
@@ -233,8 +251,29 @@ public class Butler implements Runnable{
 									response += e.toString();
 								}
 								
+								IteratorWorkerConfig iwConfig = null;
+								try {
+									iwConfig  = (IteratorWorkerConfig) ois.readObject();
+								} catch (IOException e) {
+									getLog().log(Level.ERROR, "Unable to read an Iterator Worker from object input stream",e);
+									response += e.toString();
+								} catch (ClassNotFoundException e) {
+									getLog().log(Level.ERROR, "Unable to read an Iterator Worker from object input stream",e);
+									response += e.toString();
+								} catch(RuntimeException e){
+									getLog().log(Level.ERROR, "Unable to read an Iterator Worker from object input stream",e);
+									response += e.toString();
+								}
+								
+								IteratorWorker iw = null;
 								try{
-									db.iterate(iw);
+									iw = db.iterate((Class<? extends IteratorWorker<K, V>>) iwClass,iwConfig);
+								} catch (InstantiationException e) {
+									getLog().log(Level.ERROR, "Unable to iterate on a database",e);
+									response += e.toString();
+								} catch (IllegalAccessException e) {
+									getLog().log(Level.ERROR, "Unable to iterate on a database",e);
+									response += e.toString();
 								}
 								catch(RuntimeException e){
 									getLog().log(Level.ERROR, "Unable to iterate on a database",e);
@@ -248,11 +287,11 @@ public class Butler implements Runnable{
 									response += e.toString();
 								}
 							}
-							else if(command.equals(Butler.ServerCommands.CLOSE)){
+							else if(command.equals(LUCI_Butler.ServerCommands.CLOSE)){
 								done = true;
 							}
-							else if(command.equals(Butler.ServerCommands.SIZE)){
-								Long ret = db.size();
+							else if(command.equals(LUCI_Butler.ServerCommands.SIZE)){
+								Long ret = db.sizeLong();
 
 								try {
 									oos.writeObject(ret);
@@ -263,7 +302,7 @@ public class Butler implements Runnable{
 							}
 							else{
 								done = true;
-								getLog().log(Level.ERROR, "Unknown command sent to Butler:"+command);
+								getLog().log(Level.ERROR, "Unknown command sent to LUCI_Butler:"+command);
 							}
 					
 							/* Return result */
@@ -331,7 +370,7 @@ public class Butler implements Runnable{
 				try{
 					clientSocket = serverSocket.accept();
 				} catch (SocketException e) {
-					/* Socket closed is okay because that's what happens when Butler shuts down */
+					/* Socket closed is okay because that's what happens when LUCI_Butler shuts down */
 					if(e.getMessage().equals("Socket closed")){
 						shuttingDown = true;
 					}
@@ -352,7 +391,7 @@ public class Butler implements Runnable{
 	
 	/**
 	 * This is a simple implementation of AccessControl that takes a list of allowed connections
-	 * in the constructor.  The object can then be passed to Butler for access control.
+	 * in the constructor.  The object can then be passed to LUCI_Butler for access control.
 	 * See Use Case 3 for an example of usage.
 	 *
 	 */

@@ -6,9 +6,10 @@ import java.io.IOException;
 import java.net.UnknownHostException;
 
 import edu.uci.ics.luci.lucicabinet.AccessControl;
-import edu.uci.ics.luci.lucicabinet.Butler;
-import edu.uci.ics.luci.lucicabinet.HDB_LUCI;
-import edu.uci.ics.luci.lucicabinet.HDB_LUCI_Remote;
+import edu.uci.ics.luci.lucicabinet.LUCICabinetHDB;
+import edu.uci.ics.luci.lucicabinet.LUCICabinetHDB_Remote;
+import edu.uci.ics.luci.lucicabinet.LUCICabinetMap;
+import edu.uci.ics.luci.lucicabinet.LUCI_Butler;
 
 /**
  *  This class implements Use Case 4
@@ -34,16 +35,16 @@ public class UseCase4 {
 	public static void main(String[] args) throws UnknownHostException, IOException {
 		
 		/* Set up the server side database */
-		final HDB_LUCI hdbl = new HDB_LUCI("usecase4.tch");
+		final LUCICabinetMap<Integer,String> hdbl = new LUCICabinetHDB<Integer,String>("usecase4.tch");
 		
 		/* Create a service to receive commands on port 8181 */
-		Butler butler = new Butler(hdbl,8181,new TestAccessControl());
+		LUCI_Butler<Integer,String> butler = new LUCI_Butler<Integer,String>(hdbl,8181,new TestAccessControl());
 		butler.initialize();
 		
 		/* Create the client side database interface which will talk over sockets to the 
 		 * server side database */
 		
-		final HDB_LUCI_Remote hdbl_remote = new HDB_LUCI_Remote("localhost",8181);
+		final LUCICabinetHDB_Remote<Integer,String> hdbl_remote = new LUCICabinetHDB_Remote<Integer,String>("localhost",8181);
 		
 		final int number = 75;
 		

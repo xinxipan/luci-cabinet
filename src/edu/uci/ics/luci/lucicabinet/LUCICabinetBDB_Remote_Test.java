@@ -5,7 +5,6 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
-import java.io.Serializable;
 import java.net.UnknownHostException;
 
 import org.apache.log4j.BasicConfigurator;
@@ -15,12 +14,14 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import edu.uci.ics.luci.lucicabinet.library.IteratorWorkerCountEntries;
 
-public class HDB_LUCI_RemoteTest {
+
+public class LUCICabinetBDB_Remote_Test {
 	
-	HDB_LUCI hdbl = null;
-	Butler butler = null;
-	HDB_LUCI_Remote hdb_remote = null;
+	LUCICabinetBDB<Integer,String> bdbl = null;
+	LUCI_Butler<Integer,String> butler = null;
+	LUCICabinetBDB_Remote<Integer,String> bdbl_remote = null;
 
 	@BeforeClass
 	public static void setUpBeforeClass() throws Exception {
@@ -50,17 +51,17 @@ public class HDB_LUCI_RemoteTest {
 	public void setUp() throws Exception {
 		
 		try{
-			hdbl = new HDB_LUCI("eraseme.tch");
+			bdbl = new LUCICabinetBDB<Integer,String>("eraseme.tcb");
 		}
 		catch(RuntimeException e){
 			fail("This shouldn't throw an exception"+e);
 		}
 		
-		butler = new Butler(hdbl,8181,new TestAccessControl());
+		butler = new LUCI_Butler<Integer,String>(bdbl,8181,new TestAccessControl());
 		butler.initialize();
 		
 		try{
-			hdb_remote = new HDB_LUCI_Remote("localhost",8181);
+			bdbl_remote = new LUCICabinetBDB_Remote<Integer,String>("localhost",8181);
 		} catch (UnknownHostException e) {
 			fail("This shouldn't throw an exception"+e);
 		} catch (IOException e) {
@@ -73,9 +74,9 @@ public class HDB_LUCI_RemoteTest {
 	@After
 	public void tearDown() throws Exception {
 		try{
-			if(hdb_remote != null){
-				hdb_remote.close();
-				hdb_remote = null;
+			if(bdbl_remote != null){
+				bdbl_remote.close();
+				bdbl_remote = null;
 			}
 		}
 		catch(RuntimeException e){
@@ -93,9 +94,9 @@ public class HDB_LUCI_RemoteTest {
 		}
 		
 		try{
-			if(hdbl != null){
-				hdbl.close();
-				hdbl = null;
+			if(bdbl != null){
+				bdbl.close();
+				bdbl = null;
 			}
 		}
 		catch(RuntimeException e){
@@ -108,104 +109,96 @@ public class HDB_LUCI_RemoteTest {
 	public void testPutGetOut() {
 		for(Integer key=0; key< 1000; key++){
 			String value = "foo"+key;
-			hdb_remote.put(key, value);
+			bdbl_remote.put(key, value);
 		}
 			
 		for(Integer key=0; key< 1000; key++){
-			String x = (String) hdb_remote.get(key);
+			String x = (String) bdbl_remote.get(key);
 			assertEquals("foo"+key,x);
 		}
-			
+		
+		assertEquals(1000,bdbl_remote.size());
+		assertEquals(1000,bdbl_remote.sizeLong());
+		
 		for(Integer key=0; key< 1000; key++){
-			hdb_remote.remove(key);
+			bdbl_remote.remove(key);
 		}
 			
 		for(Integer key=0; key< 1000; key++){
-			Serializable x = hdb_remote.get(key);
+			String x = bdbl_remote.get(key);
 			assertTrue(x == null);
 		}
 	}
 
-	private static class CountEntry extends IteratorWorker{
-		/**
-		 * 
-		 */
-		private static final long serialVersionUID = -6338170023311158958L;
-		
-		int count = 0 ;
-			
-		@Override
-		protected void initialize(DB_LUCI parent){
-			count = 100;
-		}
-			
-		@Override
-		protected void iterate(Serializable key,Serializable value) {
-			count++;
-			assertEquals("foo"+(Integer)key,(String) value);
-		}
-			
-		@Override
-		protected void shutdown(DB_LUCI parent){
-			count += 1000;
-		}
-	}
 
+	@SuppressWarnings("unchecked")
 	@Test
 	public void testIterate() {
-			
+		
 		for(Integer key=0; key< 1000; key++){
 			String value = "foo"+key;
-			hdb_remote.putSync(key, value);
+			bdbl_remote.put(key, value);
 		}
-		assertEquals(1000,hdb_remote.size());
+		assertEquals(1000,bdbl_remote.size());
 			
-		CountEntry iw = new CountEntry();
+		IteratorWorkerCountEntries<Integer, String> iw = null;
 		try{
-			iw = (CountEntry) hdb_remote.iterate(iw);
-		}
-		catch(RuntimeException e){
+			iw = (IteratorWorkerCountEntries<Integer, String>) bdbl_remote.iterate((Class<? extends IteratorWorker<Integer, String>>) IteratorWorkerCountEntries.class,null);
+		} catch (InstantiationException e) {
+			fail("This shouldn't throw an exception"+e);
+		} catch (IllegalAccessException e) {
+			fail("This shouldn't throw an exception"+e);
+		} catch(RuntimeException e){
 			fail("This shouldn't throw an exception"+e);
 		}
-		assertEquals(1000,hdb_remote.size());
 		
-		try {
-			Thread.sleep(2000);
-		} catch (InterruptedException e) {
-		}
-		assertEquals(2100,iw.count);
+		assertEquals(1000,iw.count);
+		assertTrue(iw.ranInit);
+		assertTrue(iw.ranShutdown);
 	}
-		
+	
 	@Test
 	public void testForDeadlock() {
 		final int number = 75;
 		
 		/*This finishes if there is no deadlock, this doesn't guarantee no deadlocks can happen though */
 		Runnable remote = new Runnable(){
+			@SuppressWarnings("unchecked")
 			public void run() {
 				for(int j=0; j< 10; j++){
 					for(Integer key=0; key< number; key++){
 						String value = "foo"+key;
-						hdb_remote.put(key, value);
-						hdb_remote.get(key);
+						bdbl_remote.put(key, value);
+						bdbl_remote.get(key);
 					}
-					CountEntry ce = new CountEntry();
-					hdb_remote.iterateAsync(ce);
+					try {
+						bdbl_remote.iterateASync((Class<? extends IteratorWorker<Integer, String>>) IteratorWorkerCountEntries.class,null);
+					} catch (InstantiationException e) {
+						fail("This shouldn't throw an exception"+e);
+					} catch (IllegalAccessException e) {
+						fail("This shouldn't throw an exception"+e);
+					}
 				}
 					
 			}
 		};
 		
 		Runnable local = new Runnable(){
+			@SuppressWarnings("unchecked")
 			public void run() {
 				for(int j=0; j< 10; j++){
 					for(Integer key=0; key< number; key++){
 						String value = "foo"+key;
-						hdb_remote.put(key, value);
-						hdb_remote.get(key);
+						bdbl.put(key, value);
+						bdbl.get(key);
 					}
-					CountEntry ce = new CountEntry();
-					hdbl.iterate(ce);
+					try {
+						bdbl.iterate((Class<? extends IteratorWorker<Integer, String>>) IteratorWorkerCountEntries.class,null);
+					} catch (InstantiationException e) {
+						fail("This shouldn't throw an exception"+e);
+					} catch (IllegalAccessException e) {
+						fail("This shouldn't throw an exception"+e);
+					}
 				}
 					
 			}
@@ -217,7 +210,7 @@ public class HDB_LUCI_RemoteTest {
 			t[i] = new Thread(remote);
 			t[i+1] = new Thread(local);
 		}
-			
+		
 		long start = System.currentTimeMillis();
 		for(int i =0; i< threadnumber; i++){
 			t[i].start();
