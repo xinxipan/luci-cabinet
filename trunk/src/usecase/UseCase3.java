@@ -11,9 +11,6 @@ import edu.uci.ics.luci.lucicabinet.LUCICabinetMap;
 import edu.uci.ics.luci.lucicabinet.LUCI_Butler;
 import edu.uci.ics.luci.lucicabinet.library.SimpleAccessControl;
 
-/**
- *  This class implements Use Case 3
- */
 public class UseCase3 {
 	
 	public static void main(String[] args) {

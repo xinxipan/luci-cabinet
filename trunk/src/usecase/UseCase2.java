@@ -3,9 +3,6 @@ package usecase;
 import edu.uci.ics.luci.lucicabinet.LUCICabinetBDB;
 import edu.uci.ics.luci.lucicabinet.LUCICabinetMap;
 
-/**
- *  This class implements Use Case 2
- */
 public class UseCase2 {
 
 	public static void main(String[] args) {
