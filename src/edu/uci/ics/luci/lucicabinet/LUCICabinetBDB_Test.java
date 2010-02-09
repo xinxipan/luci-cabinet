@@ -31,7 +31,7 @@ public class LUCICabinetBDB_Test {
 	@SuppressWarnings("unchecked")
 	public void setUp() throws Exception {
 		try{
-			bdbl = new LUCICabinetBDB<Integer,String>("eraseme.tcb");
+			bdbl = new LUCICabinetBDB<Integer,String>("eraseme.tcb",false);
 		}
 		catch(RuntimeException e){
 			fail("This shouldn't throw an exception"+e);
@@ -60,7 +60,7 @@ public class LUCICabinetBDB_Test {
 	public void testOpenClose() {
 		LUCICabinetBDB<String,String> bdb = null;
 		try{
-			bdb = new LUCICabinetBDB<String,String>("eraseme2.tcb");
+			bdb = new LUCICabinetBDB<String,String>("eraseme2.tcb",true);
 		}
 		catch(RuntimeException e){
 			fail("This shouldn't throw an exception"+e);

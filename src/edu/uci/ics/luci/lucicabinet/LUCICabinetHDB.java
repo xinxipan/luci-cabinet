@@ -14,25 +14,25 @@ import tokyocabinet.Util;
 */
 public class LUCICabinetHDB<K extends Serializable,V extends Serializable> extends LUCICabinetMap<K,V>{
 	
-	/**
-	 * 
-	 */
-	private static final long serialVersionUID = -5555508682887708517L;
-	
 	private HDB hdb = null;
 	private ReentrantReadWriteLock rwlock = null;
+	private boolean optimize = true;
 
 	/** Open the database stored at the filePathName indicated.
 	 *  If the file doesn't exist it will be created. 
 	 * The file will be write locked while open by the file system. If the file is not closed the 
 	 * underlying database will be damaged.
+     *   If the database is "optimized" then put and removes will be non-blocking and will always return null.
+     * This is a violation of the java Map contract, but cuts the database operations in half.
 	 * 
 	 * @param filePathAndName The name of the file to open, e.g."eraseme.tch"
+	 * @param optimize if true, then the database will always return null for put and remove operations
 	 */
-	public LUCICabinetHDB(String filePathAndName) {
+	public LUCICabinetHDB(String filePathAndName,boolean optimize) {
 		super();
 		hdb = new HDB();
 		rwlock = new ReentrantReadWriteLock(true);
+		this.optimize = optimize;
 		
 		rwlock.writeLock().lock();
 		try{
@@ -48,19 +48,38 @@ public class LUCICabinetHDB<K extends Serializable,V extends Serializable> exten
 		}
 	}
 	
+
+	@Override
+	/**
+    * Getter for the optimize setting of this database
+	*/
+	public boolean getOptimize(){
+		return optimize;
+	}
+	
+    /**
+    * Setter for the optimize setting of this database
+	*/
+	public void setOptimize(boolean optimize){
+		this.optimize = optimize;
+	}
+	
+		
 	
 	
 	/**
 	 * Remove an entry from the database.  If the record doesn't exist nothing happens.
 	 * @param key The entry to remove.
-	 * @return the removed value
+	 * @return the removed value, or null if optimize is true
 	 */
 	@Override
 	public V remove(Object key){
 		V ret = null;
 		rwlock.writeLock().lock();
 		try{
-			ret = get(key);
+			if(!optimize){
+				ret = get(key);
+			}
 			if(!hdb.out(Util.serialize(key))){
 				if(hdb.ecode() != HDB.ENOREC){
 					throw new RuntimeException("Error removing element from tokyo cabinet database, code:"+hdb.ecode());
@@ -79,14 +98,16 @@ public class LUCICabinetHDB<K extends Serializable,V extends Serializable> exten
 	 * Put an entry into the database
 	 * @param key
 	 * @param value
-	 * @return The value previously associated with key, or null
+	 * @return The value previously associated with key, or null if optimize is true
 	 */
 	@Override
 	public V put(K key, V value){
 		V ret = null;
 		rwlock.writeLock().lock();
 		try{
-			ret = get(key);
+			if(!optimize){
+				ret = get(key);
+			}
 			if (!hdb.put(Util.serialize(key),Util.serialize(value))){
 				throw new RuntimeException("Error putting an element in tokyo cabinet database, code:"+hdb.ecode());
 			}
@@ -102,7 +123,7 @@ public class LUCICabinetHDB<K extends Serializable,V extends Serializable> exten
 	/** Get an entry from the database
 	 * 
 	 * @param key
-	 * @return the value. null if there is no entry
+	 * @return the value. null if there is no entry or the entry is null
 	 */
 	@SuppressWarnings("unchecked")
 	@Override
@@ -125,9 +146,10 @@ public class LUCICabinetHDB<K extends Serializable,V extends Serializable> exten
 	
 	
 	
-	/** Iterate over the entries in the database and call the appropriate methods in <param>iw</param>
+	/** Iterate over the entries in the database and call the appropriate methods in <param>iwClass</param>
 	 * to do work.  See IteratorWorker for details on how the iteration works.
-	 * @param iw
+	 * @param iwClass the class to instantiate to do the work
+	 * @param iwConfig any configuration parameters to pass to iwClass after it is instantiated during initialization
 	 * @throws IllegalAccessException 
 	 * @throws InstantiationException 
 	 */
@@ -197,7 +219,7 @@ public class LUCICabinetHDB<K extends Serializable,V extends Serializable> exten
 	
 	
 	/**
-	 * Return the number of records in the database.
+	 * @return the number of records in the database.
 	 */
 	public Long sizeLong(){
 		rwlock.readLock().lock();
@@ -206,6 +228,22 @@ public class LUCICabinetHDB<K extends Serializable,V extends Serializable> exten
 		}
 		finally{
 			rwlock.readLock().unlock();
+		}
+	}
+	
+
+
+
+	/**
+	 * Optimized clear operation.  This erases all records in the database
+	 */
+	public void clear() {
+		rwlock.writeLock().lock();
+		try{
+			hdb.vanish();
+		}
+		finally{
+			rwlock.writeLock().unlock();
 		}
 	}
 

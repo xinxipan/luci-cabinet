@@ -20,25 +20,22 @@ import edu.uci.ics.luci.lucicabinet.LUCI_Butler.ServerResponse;
 /**
  * This class enables synchronized and asynchronous access to a tokyo-cabinet database over a socket connection.
  * The expected use is that the remote end would be running the LUCI_Butler class and that this class would connect to it.
- * Jobs are guaranteed to be executed in the order submitted, but the underlying database is concurrent, so other clients
- * could change it in unexpected ways. 
+ * Jobs are guaranteed to be executed in the order submitted, but the underlying remote database may be is concurrent,
+ * so other clients could change it in unexpected ways. 
  * 
- * Although the methods are synchronized to manage concurrent access to this object, the actual work of accessing the
- * database is offloaded to a worker queue so that methods should return quickly. To support this, the put and remove interfaces
- * behave differently than expected for Map as they always return null.  See the synchronous versions of those functions if you want the 
- * result.
+ * Although the methods themselves are synchronized to manage concurrent access to this object, the actual work of accessing the
+ * database is offloaded to a worker queue so that methods should return quickly. To support this, when this class is "optimized", 
+ * the put and remove interfaces behave differently than expected for Map as they return. If not "optimized" then they return
+ * the overwritten or removed value.
  */
 public class LUCICabinetMap_Remote<K extends Serializable,V extends Serializable> extends LUCICabinetMap<K,V>{
 
-	/**
-	 * 
-	 */
-	private static final long serialVersionUID = 4761685555145105247L;
-	
-	private transient ExecutorService threadExecutor = null;
+	protected transient ExecutorService threadExecutor = null;
 	protected transient Socket clientSocket = null;
 	protected transient ObjectOutputStream oos = null;
 	protected transient ObjectInputStream ois = null;
+
+	protected boolean optimize = true;
 	
 	private static transient volatile Logger log = null;
 	public static Logger getLog(){
@@ -51,11 +48,18 @@ public class LUCICabinetMap_Remote<K extends Serializable,V extends Serializable
 	
 	/**
 	 * This method opens the connection to the remote LUCI_Butler service. 
+	 *  
+	 * <p>
+	 * If the database is "optimized" then put and removes will be non-blocking and will always return null.
+     * This is a violation of the java Map contract, but cuts the database operations in half.
+	
 	 * @param host The remote host to connect to, e.g. "localhost", "192.128.1.20"
 	 * @param port The port that the remote host is listening on.
+	 * @param optimize if true, then the database will always return null for put and remove operations
 	 */
-	public LUCICabinetMap_Remote(String host,Integer port) {
+	public LUCICabinetMap_Remote(String host,Integer port,boolean optimize) {
 		super();
+		this.optimize = optimize;
 		
 		threadExecutor = Executors.newSingleThreadExecutor();			
 		
@@ -69,7 +73,10 @@ public class LUCICabinetMap_Remote<K extends Serializable,V extends Serializable
 			ServerResponse okay;
 			try {
 				okay = (ServerResponse) ois.readObject();
-				if(!okay.equals(ServerResponse.CONNECTION_OKAY)){
+				if(optimize && !okay.equals(ServerResponse.CONNECTION_OKAY_OPTIMIZE)){
+					throw new RuntimeException("Remote host did not send a connection okay signal");
+				}
+				if(!optimize && !okay.equals(ServerResponse.CONNECTION_OKAY_UNOPTIMIZE)){
 					throw new RuntimeException("Remote host did not send a connection okay signal");
 				}
 			} catch (ClassNotFoundException e) {
@@ -83,23 +90,66 @@ public class LUCICabinetMap_Remote<K extends Serializable,V extends Serializable
 	}
 	
 	
-	
 	/**
-	 * A wrapper for shutdown
+	 * Getter for the optimize setting of this database
 	 */
 	@Override
-	public synchronized void close() {
-		shutdown();
+	public synchronized boolean getOptimize(){
+		return optimize;
+	}
+
+	private class OptimizeWrapper implements Runnable{
+		
+		private Boolean optimize;
+
+		OptimizeWrapper(boolean optimize){
+			this.optimize = optimize;
+		}
+
+		public void run() {
+
+			try{
+				oos.writeObject(LUCI_Butler.ServerCommands.SET_OPTIMIZE);
+			} catch (IOException e) {
+				getLog().log(Level.ERROR, "Unable to write "+LUCI_Butler.ServerCommands.CLEAR+" command",e);
+			}
+			
+			try{
+				oos.writeObject(optimize);
+			} catch (IOException e) {
+				getLog().log(Level.ERROR, "Unable to write "+LUCI_Butler.ServerCommands.CLEAR+" command",e);
+			}
+			
+			checkForError(ois);
+			setOptimize(optimize);
+		};
 	}
 	
+	/**
+	 * Set optimization for remote database. This operations blocks until all previous operations are complete.
+	 */
+	@Override
+	public synchronized void setOptimize(boolean optimize){
+		
+		OptimizeWrapper wrapper = new OptimizeWrapper(optimize);
+		Future<?> f = threadExecutor.submit(wrapper);
+		try {
+			f.get();
+		} catch (InterruptedException e) {
+			getLog().log(Level.ERROR, "Interrupted while waiting for optimize to complete",e);
+		} catch (ExecutionException e) {
+			getLog().log(Level.ERROR, "Optimize failed",e);
+		}
+	}
 	
 	
 	/**
 	 * Gives all asynchronous operations up to 2 minutes to complete then tells
 	 * the remote server that this connection is shutting down, then cleans up
-	 * all the resources created by this class.
+	 * all the resources created by this class and closes the remote database.
 	 */
-	protected synchronized void shutdown() {
+	@Override
+	public synchronized void close() {
 
 		/* Let the current commands finish */
 		if (threadExecutor != null) {
@@ -156,10 +206,10 @@ public class LUCICabinetMap_Remote<K extends Serializable,V extends Serializable
 	
 	
 	
-	/** Wrapper for shutdown to make sure all resources are clean up */
+	/** Wrapper for close to make sure all resources are clean up */
 	protected void finalize() throws Throwable{
 		try{
-			shutdown();
+			close();
 		} catch (Throwable e) {
 			getLog().error(e.toString());
 		}
@@ -173,7 +223,7 @@ public class LUCICabinetMap_Remote<K extends Serializable,V extends Serializable
 	
 	private class RemoveWrapper implements Runnable{
 		private Object key;
-		public V result;
+		public V result = null;
 
 		public RemoveWrapper(Object key){
 			this.key = key;
@@ -181,7 +231,6 @@ public class LUCICabinetMap_Remote<K extends Serializable,V extends Serializable
 		
 		@SuppressWarnings("unchecked")
 		public void run() {
-			
 			try {
 				oos.writeObject(LUCI_Butler.ServerCommands.REMOVE);
 			} catch (IOException e) {
@@ -190,16 +239,19 @@ public class LUCICabinetMap_Remote<K extends Serializable,V extends Serializable
 		
 			try {
 				oos.writeObject(key);
+				oos.flush();
 			} catch (IOException e) {
 				getLog().log(Level.ERROR, "Unable to write "+LUCI_Butler.ServerCommands.REMOVE+" command parameter",e);
 			}
 			
-			try {
-				result = (V) ois.readObject();
-			} catch (IOException e) {
-				getLog().log(Level.ERROR, "Unable to read a result from object input stream",e);
-			} catch (ClassNotFoundException e) {
-				getLog().log(Level.ERROR, "Unable to read a result from object input stream",e);
+			if(!optimize){
+				try {
+					result = (V) ois.readObject();
+				} catch (IOException e) {
+					getLog().log(Level.ERROR, "Unable to read a result from object input stream",e);
+				} catch (ClassNotFoundException e) {
+					getLog().log(Level.ERROR, "Unable to read a result from object input stream",e);
+				}
 			}
 				
 			checkForError(ois);
@@ -235,20 +287,26 @@ public class LUCICabinetMap_Remote<K extends Serializable,V extends Serializable
 	}
 	
 	/**
-	 * Remove an entry from the database asynchronously. 
+	 * Remove an entry from the database.  If the record doesn't exist nothing happens. This operation is blocking if
+	 * optimize is set to false.
 	 * @param key The entry to remove.
-	 * @return the return value is always null.  If you actually want the value removed, use removeSync
+	 * @return the removed value, or null if optimize is true
 	 */
 	public synchronized V remove(Object key){
-		removeAsync(key);
-		return null;
+		if(optimize){
+			removeAsync(key);
+			return null;
+		}
+		else{
+			return(removeSync(key));
+		}
 	}
 	
 
 	private class PutWrapper implements Runnable{
 		private K key;
 		private V value;
-		public V result;
+		public V result = null;
 
 		public PutWrapper(K key,V value){
 			this.key = key;
@@ -272,17 +330,19 @@ public class LUCICabinetMap_Remote<K extends Serializable,V extends Serializable
 		
 			try {
 				oos.writeObject(value);
+				oos.flush();
 			} catch (IOException e) {
 				getLog().log(Level.ERROR, "Unable to write "+LUCI_Butler.ServerCommands.PUT+" command parameter,value",e);
 			}
 			
-
-			try {
-				result = (V) ois.readObject();
-			} catch (IOException e) {
-				getLog().log(Level.ERROR, "Unable to read a result from object input stream",e);
-			} catch (ClassNotFoundException e) {
-				getLog().log(Level.ERROR, "Unable to read a result from object input stream",e);
+			if(!optimize){
+				try {
+					result = (V) ois.readObject();
+				} catch (IOException e) {
+					getLog().log(Level.ERROR, "Unable to read a result from object input stream",e);
+				} catch (ClassNotFoundException e) {
+					getLog().log(Level.ERROR, "Unable to read a result from object input stream",e);
+				}
 			}
 		
 			checkForError(ois);
@@ -303,7 +363,8 @@ public class LUCICabinetMap_Remote<K extends Serializable,V extends Serializable
 	/**
 	 * A synchronous put command. Runs on a separate thread, blocks until it is done.
 	 * @param key
-	 * @param value
+	 * @param value 
+	 * @return the overwritten value or null.
 	 */
 	public synchronized V putSync(K key, V value){
 		PutWrapper pw = new PutWrapper(key,value);
@@ -320,14 +381,19 @@ public class LUCICabinetMap_Remote<K extends Serializable,V extends Serializable
 	
 
 	/**
-	 * Put a key value pair in the database asynchronously 
+	 * Put a key value pair in the database. If optimize is true, this is a non-blocking method. 
 	 * @param key
 	 * @param value
-	 * @return always returns null.  If you want the value that is overwritten as per the Map interface, try using putAsync instead.
+	 * @return the overwritten value, or null if optimize is true
 	 */
 	public synchronized V put(K key,V value){
-		putAsync(key,value);
-		return(null);
+		if(optimize){
+			putAsync(key,value);
+			return(null);
+		}
+		else{
+			return(putSync(key,value));
+		}
 	}
 	
 
@@ -349,6 +415,7 @@ public class LUCICabinetMap_Remote<K extends Serializable,V extends Serializable
 			
 			try {
 				oos.writeObject(key);
+				oos.flush();
 			} catch (IOException e) {
 				getLog().log(Level.ERROR, "Unable to write "+LUCI_Butler.ServerCommands.GET+" command parameter, key",e);
 			}
@@ -386,15 +453,16 @@ public class LUCICabinetMap_Remote<K extends Serializable,V extends Serializable
 		try {
 			f.get();
 		} catch (InterruptedException e) {
-			getLog().log(Level.ERROR, "Interrupted while waiting for remove to complete",e);
+			getLog().log(Level.ERROR, "Interrupted while waiting for get to complete",e);
 		} catch (ExecutionException e) {
-			getLog().log(Level.ERROR, "Remove failed",e);
+			getLog().log(Level.ERROR, "Get failed",e);
 		}
 		return(g.result);
 	}
 	
 
-	/** Get an entry from the database
+	/** Get an entry from the database. This is a blocking method which forces all previous operations to be
+	 * completed before returning a value.
 	 * 
 	 * @param key
 	 * @return the value in the database. null if there is no entry
@@ -430,6 +498,7 @@ public class LUCICabinetMap_Remote<K extends Serializable,V extends Serializable
 			
 			try {
 				oos.writeObject(this.iwc);
+				oos.flush();
 			} catch (IOException e) {
 				getLog().log(Level.ERROR, "Unable to write "+LUCI_Butler.ServerCommands.ITERATE+" parameter, iwc",e);
 			}
@@ -447,24 +516,28 @@ public class LUCICabinetMap_Remote<K extends Serializable,V extends Serializable
 	}	
 	
 
-	/**
-	 * Asynchronously run a job that iterates through all the entries in the database. No state is returned and the
-	 *  internal state of iw is never changed because it is sent remotely to do it's work.
-	 * @param iw a class representing the work to be done.
+	/** Iterate over the entries in the database and call the appropriate methods in <param>iwClass</param>
+	 * to do work.  See IteratorWorker for details on how the iteration works. This is a non-blocking method.
+	 * @param iwClass the class to instantiate to do the work
+	 * @param iwConfig any configuration parameters to pass to iwClass after it is instantiated during initialization
+	 * @throws IllegalAccessException 
+	 * @throws InstantiationException 
 	 */
-	public synchronized void iterateASync(Class<? extends IteratorWorker<K, V>> iw, IteratorWorkerConfig iwc) throws InstantiationException, IllegalAccessException {
-		threadExecutor.execute(new IterateWrapper(iw,iwc));
+	public synchronized void iterateASync(Class<? extends IteratorWorker<K, V>> iwClass, IteratorWorkerConfig iwConfig) throws InstantiationException, IllegalAccessException {
+		threadExecutor.execute(new IterateWrapper(iwClass,iwConfig));
 	}
 
-	/**
-	 * Synchronously run a job that iterates through all the entries in the database. Since the IteratorWorker
-	 * may have internal state that the caller wants to access after the iteration, the returned value is the IteratorWorker
-	 * after iterations.   
-	 * @param iw a class representing the work to be done.
+
+	/** Iterate over the entries in the database and call the appropriate methods in <param>iwClass</param>
+	 * to do work.  See IteratorWorker for details on how the iteration works. This is a blocking method.
+	 * @param iwClass the class to instantiate to do the work
+	 * @param iwConfig any configuration parameters to pass to iwClass after it is instantiated during initialization
 	 * @return the IteratorWorker after the work is complete.  
+	 * @throws IllegalAccessException 
+	 * @throws InstantiationException 
 	 */
-	public synchronized IteratorWorker<K, V> iterateSync(Class<? extends IteratorWorker<K, V>> iw, IteratorWorkerConfig iwc) throws InstantiationException, IllegalAccessException {
-		IterateWrapper wrapper = new IterateWrapper(iw,iwc);
+	public synchronized IteratorWorker<K, V> iterateSync(Class<? extends IteratorWorker<K, V>> iwClass, IteratorWorkerConfig iwConfig) throws InstantiationException, IllegalAccessException {
+		IterateWrapper wrapper = new IterateWrapper(iwClass,iwConfig);
 		Future<?> f = threadExecutor.submit(wrapper);
 		try {
 			f.get();
@@ -477,15 +550,18 @@ public class LUCICabinetMap_Remote<K extends Serializable,V extends Serializable
 	}
 	
 	
-	/** Synchronously iterate over the entries in the database and call the appropriate methods in <param>iw</param>
-	 * to do work.  See IteratorWorker for details on how the iteration works.  If there no information needs to be returned or
+	/** Synchronously iterate over the entries in the database and call the appropriate methods in <param>iwClass</param>
+	 * to do work.  See IteratorWorker for details on how the iteration works.  If no information needs to be returned or
 	 * collected, consider using <pre>iterateAsync</pre>.
-	 * @param iw The class to do the work
-	 * @param iwc Any configuration data to pass the class iw once it is instantiated
+	 * @param iwClass the class to instantiate to do the work
+	 * @param iwConfig any configuration parameters to pass to iwClass after it is instantiated during initialization
+	 * @return the IteratorWorker after the work is complete.  
+	 * @throws IllegalAccessException 
+	 * @throws InstantiationException 
 	 */
 	@Override
-	public IteratorWorker<K, V> iterate(Class<? extends IteratorWorker<K, V>> iw, IteratorWorkerConfig iwc) throws InstantiationException, IllegalAccessException {
-		return(iterateSync(iw,iwc));
+	public IteratorWorker<K, V> iterate(Class<? extends IteratorWorker<K, V>> iwClass, IteratorWorkerConfig iwConfig) throws InstantiationException, IllegalAccessException {
+		return(iterateSync(iwClass,iwConfig));
 	}
 	
 	
@@ -496,6 +572,7 @@ public class LUCICabinetMap_Remote<K extends Serializable,V extends Serializable
 
 			try{
 				oos.writeObject(LUCI_Butler.ServerCommands.SIZE);
+				oos.flush();
 			} catch (IOException e) {
 				getLog().log(Level.ERROR, "Unable to write "+LUCI_Butler.ServerCommands.SIZE+" command",e);
 			}
@@ -514,7 +591,8 @@ public class LUCICabinetMap_Remote<K extends Serializable,V extends Serializable
 	}
 	
 	/**
-	 * The number of entries in the database.
+	 * Get the number of entries in the database.
+	 * @return the number of entries in the database.
 	 */
 	public synchronized Long sizeLong(){
 		SizeWrapper wrapper = new SizeWrapper();
@@ -527,6 +605,38 @@ public class LUCICabinetMap_Remote<K extends Serializable,V extends Serializable
 			getLog().log(Level.ERROR, "Iterate failed",e);
 		}
 		return(wrapper.result);
+	}
+
+	
+	private class ClearWrapper implements Runnable{
+
+		public void run() {
+
+			try{
+				oos.writeObject(LUCI_Butler.ServerCommands.CLEAR);
+				oos.flush();
+			} catch (IOException e) {
+				getLog().log(Level.ERROR, "Unable to write "+LUCI_Butler.ServerCommands.CLEAR+" command",e);
+			}
+			
+			checkForError(ois);
+				
+		};
+	}
+	
+	/**
+	 * Erase all the entries in the remote database.
+	 */
+	public synchronized void clear(){
+		ClearWrapper wrapper = new ClearWrapper();
+		Future<?> f = threadExecutor.submit(wrapper);
+		try {
+			f.get();
+		} catch (InterruptedException e) {
+			getLog().log(Level.ERROR, "Interrupted while waiting for iterate to complete",e);
+		} catch (ExecutionException e) {
+			getLog().log(Level.ERROR, "Iterate failed",e);
+		}
 	}
 	
 
