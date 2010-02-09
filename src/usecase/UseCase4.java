@@ -5,32 +5,13 @@ import static org.junit.Assert.fail;
 import java.io.IOException;
 import java.net.UnknownHostException;
 
-import edu.uci.ics.luci.lucicabinet.AccessControl;
 import edu.uci.ics.luci.lucicabinet.LUCICabinetHDB;
 import edu.uci.ics.luci.lucicabinet.LUCICabinetHDB_Remote;
 import edu.uci.ics.luci.lucicabinet.LUCICabinetMap;
 import edu.uci.ics.luci.lucicabinet.LUCI_Butler;
+import edu.uci.ics.luci.lucicabinet.library.SimplestAccessControl;
 
-/**
- *  This class implements Use Case 4
- */
 public class UseCase4 {
-	
-	private static class TestAccessControl extends AccessControl{
-		@Override
-		public boolean allowSource(String source) {
-			if(source.equals("/127.0.0.1")){
-				return true;
-			}
-			else if(source.equals("127.0.0.1")){
-				return true;
-			}
-			else{
-				return false;
-			}
-		}
-	};
-
 
 	public static void main(String[] args) throws UnknownHostException, IOException {
 		
@@ -38,7 +19,7 @@ public class UseCase4 {
 		final LUCICabinetMap<Integer,String> hdbl = new LUCICabinetHDB<Integer,String>("usecase4.tch",true);
 		
 		/* Create a service to receive commands on port 8181 */
-		LUCI_Butler<Integer,String> butler = new LUCI_Butler<Integer,String>(hdbl,8181,new TestAccessControl());
+		LUCI_Butler<Integer,String> butler = new LUCI_Butler<Integer,String>(hdbl,8181,new SimplestAccessControl());
 		butler.initialize();
 		
 		/* Create the client side database interface which will talk over sockets to the 
