@@ -10,7 +10,7 @@ public class UseCase2 {
 
 	public static void main(String[] args) {
 		
-		final LUCICabinetMap<Integer,String> bdbl = new LUCICabinetBDB<Integer,String>("usecase2.tcb");
+		final LUCICabinetMap<Integer,String> bdbl = new LUCICabinetBDB<Integer,String>("usecase2.tcb",true);
 		
 		Runnable r = new Runnable(){
 			public void run() {

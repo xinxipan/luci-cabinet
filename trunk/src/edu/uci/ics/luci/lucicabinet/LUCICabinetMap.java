@@ -5,27 +5,22 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
 
-import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 
-import edu.uci.ics.luci.lucicabinet.library.IteratorWorkerEquals;
 import edu.uci.ics.luci.lucicabinet.library.IteratorWorkerFindValue;
 import edu.uci.ics.luci.lucicabinet.library.IteratorWorkerHashCode;
 import edu.uci.ics.luci.lucicabinet.library.IteratorWorkerMakeKeySet;
 import edu.uci.ics.luci.lucicabinet.library.IteratorWorkerMakeValueCollection;
-import edu.uci.ics.luci.lucicabinet.library.IteratorWorkerRemoveAll;
 import edu.uci.ics.luci.lucicabinet.library.IteratorWorkerFindValue.FindValueConfig;
 
 /**
  * The abstract class for the databases that luci-cabinet synchronizes over
  *
  */
-public abstract class LUCICabinetMap<K extends Serializable,V extends Serializable> implements Map<K,V>,Serializable{
+public abstract class LUCICabinetMap<K extends Serializable,V extends Serializable> implements Map<K,V>{
 	
-	/**
-	 * 
-	 */
-	private static final long serialVersionUID = 4104995583497791315L;
+	public abstract boolean getOptimize();
+	public abstract void setOptimize(boolean optimize);
 	
 	public abstract V get(Object key);
 	
@@ -47,16 +42,6 @@ public abstract class LUCICabinetMap<K extends Serializable,V extends Serializab
 		return log;
 	}
 
-	@SuppressWarnings("unchecked")
-	public void clear(){
-		try {
-			iterate((Class<? extends IteratorWorker<K, V>>) IteratorWorkerRemoveAll.class,new IteratorWorkerConfig());
-		} catch (InstantiationException e) {
-			getLog().log(Level.ERROR,"Unable to clear:",e);
-		} catch (IllegalAccessException e) {
-			getLog().log(Level.ERROR,"Unable to clear:",e);
-		}
-	}
 	
 	public boolean containsKey(Object key){
 		return(get(key) != null);
@@ -94,19 +79,6 @@ public abstract class LUCICabinetMap<K extends Serializable,V extends Serializab
 	}
 	
 	@SuppressWarnings("unchecked")
-	public boolean LUCICabinetMapEquals(LUCICabinetMap<K,V> lcm){
-		IteratorWorkerEquals<K, V> iw;
-		try {
-			iw = (IteratorWorkerEquals<K, V>) iterate((Class<? extends IteratorWorkerEquals<K, V>>) IteratorWorkerEquals.class,new IteratorWorkerEquals.EqualsConfig<K,V>(lcm));
-		} catch (InstantiationException e) {
-			return(false);
-		} catch (IllegalAccessException e) {
-			return(false);
-		}
-		return(iw.equals);
-	}
-	
-	@SuppressWarnings("unchecked")
 	public boolean equals(Object aThat){
 		if ( this == aThat ){
 			return true;
@@ -117,7 +89,7 @@ public abstract class LUCICabinetMap<K extends Serializable,V extends Serializab
 			}
 			else{
 				LUCICabinetMap<K,V> that = (LUCICabinetMap<K,V>)aThat;
-				return LUCICabinetMapEquals(that);
+				return(this.hashCode() == that.hashCode());
 			}
 		}
 	}

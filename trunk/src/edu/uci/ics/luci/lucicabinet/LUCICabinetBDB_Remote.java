@@ -33,8 +33,8 @@ public class LUCICabinetBDB_Remote<K extends Serializable,V extends Serializable
 	 * @throws UnknownHostException
 	 * @throws IOException thrown if the remote host doesn't respond with the expected handshake.
 	 */
-	public LUCICabinetBDB_Remote(String host,Integer port) throws UnknownHostException, IOException {
-		super(host,port);
+	public LUCICabinetBDB_Remote(String host,Integer port,boolean optimize) throws UnknownHostException, IOException {
+		super(host,port,optimize);
 	}
 
 }

@@ -16,6 +16,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import edu.uci.ics.luci.lucicabinet.library.IteratorWorkerCountEntries;
+import edu.uci.ics.luci.lucicabinet.library.SimplerAccessControl;
 
 public class LUCICabinetMap_Shard_Test {
 	
@@ -36,20 +37,6 @@ public class LUCICabinetMap_Shard_Test {
 	public static void tearDownAfterClass() throws Exception {
 	}
 	
-	private static class TestAccessControl extends AccessControl{
-		@Override
-		public boolean allowSource(String source) {
-			if(source.equals("/127.0.0.1")){
-				return true;
-			}
-			else if(source.equals("127.0.0.1")){
-				return true;
-			}
-			else{
-				return false;
-			}
-		}
-	};
 
 	@Before
 	public void setUp() throws Exception {
@@ -61,8 +48,8 @@ public class LUCICabinetMap_Shard_Test {
 		
 		try{
 			for(int i = 0; i < this.numberOfShards; i++){
-				localShards.add(new LUCICabinetHDB<Integer,String>("eraseme"+i+".tch"));
-				remoteBackingShards.add(new LUCICabinetHDB<Integer,String>("eraseme"+i+"Remote.tch"));
+				localShards.add(new LUCICabinetHDB<Integer,String>("eraseme"+i+".tch",false));
+				remoteBackingShards.add(new LUCICabinetHDB<Integer,String>("eraseme"+i+"Remote.tch",false));
 			}
 		}
 		catch(RuntimeException e){
@@ -72,7 +59,7 @@ public class LUCICabinetMap_Shard_Test {
 		
 		try{
 			for(int i = 0; i < this.numberOfShards; i++){
-				LUCI_Butler<Integer,String> b = new LUCI_Butler<Integer,String>(remoteBackingShards.get(i),8081+i,new TestAccessControl());
+				LUCI_Butler<Integer,String> b = new LUCI_Butler<Integer,String>(remoteBackingShards.get(i),8081+i,new SimplerAccessControl());
 				b.initialize();
 				butlers.add(b);
 			}
@@ -83,7 +70,7 @@ public class LUCICabinetMap_Shard_Test {
 		
 		try{
 			for(int i = 0; i < this.numberOfShards; i++){
-				remoteShards.add(new LUCICabinetHDB_Remote<Integer,String>("localhost",8081+i));
+				remoteShards.add(new LUCICabinetHDB_Remote<Integer,String>("localhost",8081+i,false));
 			}
 		}
 		catch(RuntimeException e){
@@ -163,7 +150,7 @@ public class LUCICabinetMap_Shard_Test {
 		List<LUCICabinetMap<Integer,String>> shards = new ArrayList<LUCICabinetMap<Integer,String>>(this.numberOfShards*2);
 		shards.addAll(localShards);
 		shards.addAll(remoteShards);
-		sharded_DB = new LUCICabinetMap_Shard<Integer,String>(shards);
+		sharded_DB = new LUCICabinetMap_Shard<Integer,String>(shards,false);
 		
 		for(Integer key=0; key< 1000; key++){
 			String value = "foo"+key;
@@ -194,7 +181,7 @@ public class LUCICabinetMap_Shard_Test {
 		List<LUCICabinetMap<Integer,String>> shards = new ArrayList<LUCICabinetMap<Integer,String>>(this.numberOfShards*2);
 		shards.addAll(localShards);
 		shards.addAll(remoteShards);
-		sharded_DB = new LUCICabinetMap_Shard<Integer,String>(shards);
+		sharded_DB = new LUCICabinetMap_Shard<Integer,String>(shards,false);
 			
 		for(Integer key=0; key< 1000; key++){
 			String value = "foo"+key;
@@ -223,7 +210,7 @@ public class LUCICabinetMap_Shard_Test {
 		List<LUCICabinetMap<Integer,String>> shards = new ArrayList<LUCICabinetMap<Integer,String>>(this.numberOfShards*2);
 		shards.addAll(localShards);
 		shards.addAll(remoteShards);
-		sharded_DB = new LUCICabinetMap_Shard<Integer,String>(shards);
+		sharded_DB = new LUCICabinetMap_Shard<Integer,String>(shards,false);
 		
 		final int number = 75;
 		

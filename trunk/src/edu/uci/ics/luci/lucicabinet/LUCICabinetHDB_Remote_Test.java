@@ -51,7 +51,7 @@ public class LUCICabinetHDB_Remote_Test {
 	public void setUp() throws Exception {
 		
 		try{
-			hdbl = new LUCICabinetHDB<Integer,String>("eraseme.tch");
+			hdbl = new LUCICabinetHDB<Integer,String>("eraseme.tch",false);
 		}
 		catch(RuntimeException e){
 			fail("This shouldn't throw an exception"+e);
@@ -61,7 +61,7 @@ public class LUCICabinetHDB_Remote_Test {
 		butler.initialize();
 		
 		try{
-			hdb_remote = new LUCICabinetHDB_Remote<Integer,String>("localhost",8181);
+			hdb_remote = new LUCICabinetHDB_Remote<Integer,String>("localhost",8181,false);
 		} catch (UnknownHostException e) {
 			fail("This shouldn't throw an exception"+e);
 		} catch (IOException e) {
@@ -128,6 +128,16 @@ public class LUCICabinetHDB_Remote_Test {
 			String x = hdb_remote.get(key);
 			assertTrue(x == null);
 		}
+		
+		for(Integer key=0; key< 1000; key++){
+			String value = "foo"+key;
+			hdb_remote.put(key,value);
+		}
+		assertEquals(1000,hdb_remote.size());
+		assertEquals(1000,hdb_remote.sizeLong());
+		hdb_remote.clear();
+		assertEquals(0,hdb_remote.size());
+		assertEquals(0,hdb_remote.sizeLong());
 	}
 
 

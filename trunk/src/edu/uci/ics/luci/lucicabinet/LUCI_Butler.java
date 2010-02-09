@@ -7,20 +7,19 @@ import java.io.Serializable;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
-import java.util.Set;
 
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 
 /**
  * LUCI_Butler is a class that provides socket access to a LUCI_HDB database.
- * See the code for UseCase 3 and 4
+ * See the use cases for example code
  *
  */
 public class LUCI_Butler<K extends Serializable,V extends Serializable> implements Runnable{
 	
-	enum ServerCommands {PUT,GET,REMOVE,ITERATE, CLOSE, SIZE};
-	enum ServerResponse {CONNECTION_OKAY,COMMAND_SUCCESSFUL,COMMAND_FAILED};
+	enum ServerCommands {PUT,GET,REMOVE,ITERATE, CLOSE, SIZE, CLEAR, SET_OPTIMIZE};
+	enum ServerResponse {CONNECTION_OKAY_OPTIMIZE, CONNECTION_OKAY_UNOPTIMIZE,COMMAND_SUCCESSFUL,COMMAND_FAILED};
 	
 	private boolean shuttingDown = false;
 	protected LUCICabinetMap<K,V> db;
@@ -56,7 +55,7 @@ public class LUCI_Butler<K extends Serializable,V extends Serializable> implemen
 	 * 
 	 * @param db The database to expose
 	 * @param port The port to accept commands on
-	 * @param checker An object which tells us which connections are allowed
+	 * @param checker An object which tells us which connections are allowed. Examples are in the library package
 	 */
 	public LUCI_Butler(LUCICabinetMap<K,V> db,int port,AccessControl checker){
 		this.db = db;
@@ -82,6 +81,10 @@ public class LUCI_Butler<K extends Serializable,V extends Serializable> implemen
 		t.start();
 	}
 
+	/**
+	 * Class to handle requests to LUCI_Butler
+	 *
+	 */
 	private class Handler implements Runnable{
 		
 		private Socket clientSocket = null;
@@ -116,7 +119,12 @@ public class LUCI_Butler<K extends Serializable,V extends Serializable> implemen
 					}
 					
 					try {
-						oos.writeObject(ServerResponse.CONNECTION_OKAY);
+						if(db.getOptimize()){
+							oos.writeObject(ServerResponse.CONNECTION_OKAY_OPTIMIZE);
+						}
+						else{
+							oos.writeObject(ServerResponse.CONNECTION_OKAY_UNOPTIMIZE);
+						}
 						oos.flush();
 					} catch (IOException e) {
 						getLog().log(Level.ERROR, "Unable to write to object output stream",e);
@@ -162,11 +170,13 @@ public class LUCI_Butler<K extends Serializable,V extends Serializable> implemen
 										response += e.toString();
 									}
 
-									try {
-										oos.writeObject(thing);
-									} catch (IOException e) {
-										getLog().log(Level.ERROR, "Unable to write a result to object output stream",e);
-										response += e.toString();
+									if(!db.getOptimize()){
+										try {
+											oos.writeObject(thing);
+										} catch (IOException e) {
+											getLog().log(Level.ERROR, "Unable to write a result to object output stream",e);
+											response += e.toString();
+										}
 									}
 								}
 							}
@@ -204,11 +214,13 @@ public class LUCI_Butler<K extends Serializable,V extends Serializable> implemen
 									response += e.toString();
 								}
 								
-								try {
-									oos.writeObject(thing);
-								} catch (IOException e) {
-									getLog().log(Level.ERROR, "Unable to write a result to object output stream",e);
-									response += e.toString();
+								if(!db.getOptimize()){
+									try {
+										oos.writeObject(thing);
+									} catch (IOException e) {
+										getLog().log(Level.ERROR, "Unable to write a result to object output stream",e);
+										response += e.toString();
+									}
 								}
 								
 							}
@@ -241,13 +253,13 @@ public class LUCI_Butler<K extends Serializable,V extends Serializable> implemen
 								try {
 									iwClass  = (Class<? extends IteratorWorker>) ois.readObject();
 								} catch (IOException e) {
-									getLog().log(Level.ERROR, "Unable to read an Iterator Worker from object input stream",e);
+									getLog().log(Level.ERROR, "Unable to read an Iterator Worker Class from object input stream",e);
 									response += e.toString();
 								} catch (ClassNotFoundException e) {
-									getLog().log(Level.ERROR, "Unable to read an Iterator Worker from object input stream",e);
+									getLog().log(Level.ERROR, "Unable to read an Iterator Worker Class from object input stream",e);
 									response += e.toString();
 								} catch(RuntimeException e){
-									getLog().log(Level.ERROR, "Unable to read an Iterator Worker from object input stream",e);
+									getLog().log(Level.ERROR, "Unable to read an Iterator Worker Class from object input stream",e);
 									response += e.toString();
 								}
 								
@@ -255,13 +267,13 @@ public class LUCI_Butler<K extends Serializable,V extends Serializable> implemen
 								try {
 									iwConfig  = (IteratorWorkerConfig) ois.readObject();
 								} catch (IOException e) {
-									getLog().log(Level.ERROR, "Unable to read an Iterator Worker from object input stream",e);
+									getLog().log(Level.ERROR, "Unable to read an IteratorWorkerConfig from object input stream",e);
 									response += e.toString();
 								} catch (ClassNotFoundException e) {
-									getLog().log(Level.ERROR, "Unable to read an Iterator Worker from object input stream",e);
+									getLog().log(Level.ERROR, "Unable to read an IteratorWorkerConfig from object input stream",e);
 									response += e.toString();
 								} catch(RuntimeException e){
-									getLog().log(Level.ERROR, "Unable to read an Iterator Worker from object input stream",e);
+									getLog().log(Level.ERROR, "Unable to read an IteratorWorkerConfig from object input stream",e);
 									response += e.toString();
 								}
 								
@@ -300,15 +312,34 @@ public class LUCI_Butler<K extends Serializable,V extends Serializable> implemen
 									response += e.toString();
 								}
 							}
+							else if(command.equals(LUCI_Butler.ServerCommands.CLEAR)){
+								db.clear();
+							}
+							else if(command.equals(LUCI_Butler.ServerCommands.SET_OPTIMIZE)){
+								try {
+									Boolean optimize = (Boolean) ois.readObject();
+									db.setOptimize(optimize);
+								} catch (IOException e) {
+									getLog().log(Level.ERROR, "Unable to read a key to get object input stream",e);
+									response += e.toString();
+								} catch (ClassNotFoundException e) {
+									getLog().log(Level.ERROR, "Unable to read a key to get object input stream",e);
+									response += e.toString();
+								} catch(RuntimeException e){
+									getLog().log(Level.ERROR, "Unable to read a key to get object input stream",e);
+									response += e.toString();
+								}
+							}
 							else{
 								done = true;
 								getLog().log(Level.ERROR, "Unknown command sent to LUCI_Butler:"+command);
 							}
-					
+							
 							/* Return result */
 							if(response.equals("")){
 								try{
 									oos.writeObject(ServerResponse.COMMAND_SUCCESSFUL);
+									oos.flush();
 								} catch (IOException e) {
 									getLog().log(Level.ERROR, "Unable to write a result to object output stream",e);
 									return;
@@ -317,6 +348,7 @@ public class LUCI_Butler<K extends Serializable,V extends Serializable> implemen
 							else{
 								try{
 									oos.writeObject(ServerResponse.COMMAND_FAILED);
+									oos.flush();
 								} catch (IOException e) {
 									getLog().log(Level.ERROR, "Unable to write a result to object output stream",e);
 									return;
@@ -389,29 +421,5 @@ public class LUCI_Butler<K extends Serializable,V extends Serializable> implemen
 		}
 	}
 	
-	/**
-	 * This is a simple implementation of AccessControl that takes a list of allowed connections
-	 * in the constructor.  The object can then be passed to LUCI_Butler for access control.
-	 * See Use Case 3 for an example of usage.
-	 *
-	 */
-	public static class SimpleAccessControl extends AccessControl{
-		private Set<String> whitelist;
-
-		public SimpleAccessControl(Set<String> whitelist){
-			this.whitelist = whitelist;
-		}
-
-		@Override
-		public boolean allowSource(String source) {
-			for(String white:whitelist){
-				if(white.equals(source)){
-					return true;
-				}
-			}
-			getLog().log(Level.INFO, this.getClass().getCanonicalName()+" rejected a connection from "+source);
-			return false;
-		}
-	}
 
 }

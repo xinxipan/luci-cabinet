@@ -51,7 +51,7 @@ public class LUCICabinetBDB_Remote_Test {
 	public void setUp() throws Exception {
 		
 		try{
-			bdbl = new LUCICabinetBDB<Integer,String>("eraseme.tcb");
+			bdbl = new LUCICabinetBDB<Integer,String>("eraseme.tcb",false);
 		}
 		catch(RuntimeException e){
 			fail("This shouldn't throw an exception"+e);
@@ -61,7 +61,7 @@ public class LUCICabinetBDB_Remote_Test {
 		butler.initialize();
 		
 		try{
-			bdbl_remote = new LUCICabinetBDB_Remote<Integer,String>("localhost",8181);
+			bdbl_remote = new LUCICabinetBDB_Remote<Integer,String>("localhost",8181,false);
 		} catch (UnknownHostException e) {
 			fail("This shouldn't throw an exception"+e);
 		} catch (IOException e) {

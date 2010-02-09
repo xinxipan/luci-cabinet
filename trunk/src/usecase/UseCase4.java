@@ -35,7 +35,7 @@ public class UseCase4 {
 	public static void main(String[] args) throws UnknownHostException, IOException {
 		
 		/* Set up the server side database */
-		final LUCICabinetMap<Integer,String> hdbl = new LUCICabinetHDB<Integer,String>("usecase4.tch");
+		final LUCICabinetMap<Integer,String> hdbl = new LUCICabinetHDB<Integer,String>("usecase4.tch",true);
 		
 		/* Create a service to receive commands on port 8181 */
 		LUCI_Butler<Integer,String> butler = new LUCI_Butler<Integer,String>(hdbl,8181,new TestAccessControl());
@@ -44,7 +44,7 @@ public class UseCase4 {
 		/* Create the client side database interface which will talk over sockets to the 
 		 * server side database */
 		
-		final LUCICabinetHDB_Remote<Integer,String> hdbl_remote = new LUCICabinetHDB_Remote<Integer,String>("localhost",8181);
+		final LUCICabinetHDB_Remote<Integer,String> hdbl_remote = new LUCICabinetHDB_Remote<Integer,String>("localhost",8181,true);
 		
 		final int number = 75;
 		
